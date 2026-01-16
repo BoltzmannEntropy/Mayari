@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/pdf_provider.dart';
 import '../providers/sources_provider.dart';
+import '../widgets/library/library_sidebar.dart';
 import '../widgets/pdf_viewer/pdf_viewer_pane.dart';
 import '../widgets/quotes_panel/quotes_panel.dart';
 
@@ -14,12 +15,8 @@ class WorkspaceScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
-  double _splitPosition = 0.6;
-
-  @override
-  void initState() {
-    super.initState();
-  }
+  static const double _libraryWidth = 200;
+  double _splitPosition = 0.55; // Position between PDF viewer and quotes panel
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
@@ -81,22 +78,30 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
         ),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final leftWidth = constraints.maxWidth * _splitPosition;
-            final rightWidth = constraints.maxWidth * (1 - _splitPosition);
+            final availableWidth = constraints.maxWidth - _libraryWidth;
+            final pdfWidth = availableWidth * _splitPosition;
+            final quotesWidth = availableWidth * (1 - _splitPosition);
 
             return Row(
               children: [
+                // Library sidebar (fixed width)
+                const SizedBox(
+                  width: _libraryWidth,
+                  child: LibrarySidebar(),
+                ),
+                // PDF Viewer
                 SizedBox(
-                  width: leftWidth - 4,
+                  width: pdfWidth - 4,
                   child: const PdfViewerPane(),
                 ),
+                // Resizable divider
                 MouseRegion(
                   cursor: SystemMouseCursors.resizeColumn,
                   child: GestureDetector(
                     onHorizontalDragUpdate: (details) {
                       setState(() {
-                        _splitPosition += details.delta.dx / constraints.maxWidth;
-                        _splitPosition = _splitPosition.clamp(0.3, 0.8);
+                        _splitPosition += details.delta.dx / availableWidth;
+                        _splitPosition = _splitPosition.clamp(0.3, 0.75);
                       });
                     },
                     child: Container(
@@ -115,8 +120,9 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     ),
                   ),
                 ),
+                // Quotes panel
                 SizedBox(
-                  width: rightWidth - 4,
+                  width: quotesWidth - 4,
                   child: const QuotesPanel(),
                 ),
               ],
