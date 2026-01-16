@@ -1,0 +1,37 @@
+name: mayari
+description: "PDF quote extraction tool for academic research"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # PDF viewing
+  syncfusion_flutter_pdfviewer: ^29.1.41
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # File picking
+  file_picker: ^8.1.7
+
+  # Path utilities
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # UUID generation
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
