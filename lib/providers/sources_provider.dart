@@ -34,7 +34,12 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
   }
 
   Future<void> _loadSources() async {
-    state = await _storage.loadSources();
+    final loaded = await _storage.loadSources();
+    final deduped = _dedupeSources(loaded);
+    state = deduped.sources;
+    if (deduped.didChange) {
+      await _save();
+    }
   }
 
   Future<void> _save() async {
@@ -72,16 +77,28 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
     await _save();
   }
 
-  Future<void> addQuote({
+  Future<bool> addQuote({
     required String sourceId,
     required String text,
     required int pageNumber,
     String? notes,
   }) async {
+    final normalizedText = _normalizeQuoteText(text);
+    if (normalizedText.isEmpty) return false;
+
+    final source = state.firstWhere((s) => s.id == sourceId);
+    final alreadyExists = source.quotes.any(
+      (q) =>
+          _normalizeQuoteText(q.text) == normalizedText &&
+          q.pageNumber == pageNumber,
+    );
+
+    if (alreadyExists) return false;
+
     final quote = Quote(
       id: _uuid.v4(),
       sourceId: sourceId,
-      text: text,
+      text: text.trim(),
       pageNumber: pageNumber,
       notes: notes,
       createdAt: DateTime.now(),
@@ -95,6 +112,7 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
       return s;
     }).toList();
     await _save();
+    return true;
   }
 
   int _getNextOrder(String sourceId) {
@@ -142,4 +160,61 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
     }).toList();
     await _save();
   }
+
+  String _normalizeQuoteText(String text) {
+    return text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  _DedupeResult _dedupeSources(List<Source> sources) {
+    var didChange = false;
+
+    final updated = sources.map((source) {
+      var sourceChanged = false;
+      final quotesByOrder = List<Quote>.from(source.quotes)
+        ..sort((a, b) => a.order.compareTo(b.order));
+
+      final seen = <String>{};
+      final deduped = <Quote>[];
+
+      for (final quote in quotesByOrder) {
+        final key =
+            '${_normalizeQuoteText(quote.text)}::${quote.pageNumber}';
+        if (seen.add(key)) {
+          deduped.add(quote);
+        } else {
+          sourceChanged = true;
+        }
+      }
+
+      final reindexed = <Quote>[];
+      for (var i = 0; i < deduped.length; i++) {
+        final quote = deduped[i];
+        if (quote.order != i) {
+          reindexed.add(quote.copyWith(order: i));
+          sourceChanged = true;
+        } else {
+          reindexed.add(quote);
+        }
+      }
+
+      if (reindexed.length != source.quotes.length) {
+        sourceChanged = true;
+      }
+
+      if (sourceChanged) {
+        didChange = true;
+        return source.copyWith(quotes: reindexed);
+      }
+      return source;
+    }).toList();
+
+    return _DedupeResult(updated, didChange);
+  }
+}
+
+class _DedupeResult {
+  final List<Source> sources;
+  final bool didChange;
+
+  const _DedupeResult(this.sources, this.didChange);
 }

@@ -22,6 +22,7 @@ class QuotesPanel extends ConsumerStatefulWidget {
 class _QuotesPanelState extends ConsumerState<QuotesPanel> {
   final Set<String> _expandedSources = {};
   final _exportService = ExportService();
+  String? _lastActiveId;
 
   @override
   void initState() {
@@ -174,6 +175,16 @@ class _QuotesPanelState extends ConsumerState<QuotesPanel> {
     final sources = ref.watch(sourcesProvider);
     final activeId = ref.watch(activeSourceIdProvider);
 
+    if (activeId != _lastActiveId) {
+      _lastActiveId = activeId;
+      if (activeId != null && !_expandedSources.contains(activeId)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _expandedSources.add(activeId));
+        });
+      }
+    }
+
     return Column(
       children: [
         _buildHeader(),
@@ -298,24 +309,60 @@ class _QuotesPanelState extends ConsumerState<QuotesPanel> {
           top: BorderSide(color: Theme.of(context).dividerColor),
         ),
       ),
-      child: Row(
-        children: [
-          Text(
-            '$totalQuotes quotes from ${sources.length} sources',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: sources.isEmpty ? null : _copyToClipboard,
-            tooltip: 'Copy to clipboard',
-          ),
-          FilledButton.icon(
-            onPressed: sources.isEmpty ? null : _export,
-            icon: const Icon(Icons.download, size: 18),
-            label: const Text('Export'),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 280;
+
+          if (isCompact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$totalQuotes quotes from ${sources.length} sources',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.copy),
+                      onPressed: sources.isEmpty ? null : _copyToClipboard,
+                      tooltip: 'Copy to clipboard',
+                    ),
+                    FilledButton.icon(
+                      onPressed: sources.isEmpty ? null : _export,
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('Export'),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$totalQuotes quotes from ${sources.length} sources',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.copy),
+                onPressed: sources.isEmpty ? null : _copyToClipboard,
+                tooltip: 'Copy to clipboard',
+              ),
+              FilledButton.icon(
+                onPressed: sources.isEmpty ? null : _export,
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Export'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

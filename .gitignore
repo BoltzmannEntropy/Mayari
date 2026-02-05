@@ -25,3 +25,16 @@ linux/flutter/ephemeral/
 # Dependency directories
 .pub-cache/
 .pub/
+
+# Mayari local files
+.logs/
+.pids/
+
+# Backend (Python)
+backend/.venv/
+backend/outputs/
+backend/__pycache__/
+*.pyc
+
+# Bundled Kokoro TTS models (~350MB)
+macos/Runner/Resources/kokoro/
