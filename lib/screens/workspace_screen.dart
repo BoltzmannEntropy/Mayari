@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/pdf_provider.dart';
 import '../providers/sources_provider.dart';
+import '../providers/text_reader_provider.dart';
 import '../widgets/library/library_sidebar.dart';
 import '../widgets/logs/logs_panel.dart';
 import '../widgets/pdf_viewer/pdf_viewer_pane.dart';
 import '../widgets/quotes_panel/quotes_panel.dart';
+import '../widgets/text_reader/text_reader_pane.dart';
 
 class WorkspaceScreen extends ConsumerStatefulWidget {
   const WorkspaceScreen({super.key});
@@ -18,6 +20,48 @@ class WorkspaceScreen extends ConsumerStatefulWidget {
 class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   static const double _libraryWidth = 200;
   double _splitPosition = 0.55; // Position between PDF viewer and quotes panel
+
+  Widget _buildContentToggle(BuildContext context, ContentSource source) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          SegmentedButton<ContentSource>(
+            segments: const [
+              ButtonSegment<ContentSource>(
+                value: ContentSource.pdf,
+                label: Text('PDF'),
+                icon: Icon(Icons.picture_as_pdf, size: 18),
+              ),
+              ButtonSegment<ContentSource>(
+                value: ContentSource.text,
+                label: Text('Text'),
+                icon: Icon(Icons.article, size: 18),
+              ),
+            ],
+            selected: {source},
+            onSelectionChanged: (Set<ContentSource> selection) {
+              ref.read(activeContentSourceProvider.notifier).state =
+                  selection.first;
+            },
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
@@ -91,6 +135,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   final pdfWidth = availableWidth * _splitPosition;
                   final quotesWidth = availableWidth * (1 - _splitPosition);
 
+                  final contentSource = ref.watch(activeContentSourceProvider);
+
                   return Row(
                     children: [
                       // Library sidebar (fixed width)
@@ -98,10 +144,21 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         width: _libraryWidth,
                         child: LibrarySidebar(),
                       ),
-                      // PDF Viewer
+                      // Main content area (PDF or Text)
                       SizedBox(
                         width: pdfWidth - 4,
-                        child: const PdfViewerPane(),
+                        child: Column(
+                          children: [
+                            // Content source toggle
+                            _buildContentToggle(context, contentSource),
+                            // Content pane
+                            Expanded(
+                              child: contentSource == ContentSource.pdf
+                                  ? const PdfViewerPane()
+                                  : const TextReaderPane(),
+                            ),
+                          ],
+                        ),
                       ),
                       // Resizable divider
                       MouseRegion(
