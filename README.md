@@ -16,8 +16,6 @@
 
 A macOS desktop application for **academic researchers**: **read your PDF books** in a clean two-pane interface, **listen with high-quality British TTS** while you work, **extract quotes** with a single keystroke (Cmd+D), and **export to Markdown** with properly formatted citations.
 
-**Built in a single session with [Claude Code](https://claude.ai/claude-code)** — from idea to working app in under 30 minutes.
-
 ---
 
 ## Features at a Glance
@@ -529,18 +527,6 @@ Mayari was designed to be:
 3. **Local-first**: All data stays on your machine
 4. **Academic-focused**: Proper citation tracking from the start
 
-### Built With Claude Code
-
-Mayari was built in under 30 minutes using [Claude Code](https://claude.ai/claude-code), demonstrating rapid application development with AI assistance.
-
-**The Prompt:**
-> "Let's try Flutter. Project should be under Mayari, it should allow uploading a PDF book file, user can read and page like any other PDF viewer on the left pane, then he can mark sections or lines, then they are copied to a text editing pane to the right, with the correct line numbers the quote was taken from."
-
-**Development Workflow:**
-1. **Brainstorming** (~5 min): Clarifying use case and requirements
-2. **Design** (~2 min): Complete specification documented
-3. **Implementation** (~20 min): Full app built with proper architecture
-4. **Result**: Production-ready application
 
 ---
 
@@ -589,7 +575,6 @@ MIT License - feel free to use, modify, and distribute.
 - [Flutter](https://flutter.dev) - Cross-platform UI framework
 - [Riverpod](https://riverpod.dev) - Reactive state management
 - [FastAPI](https://fastapi.tiangolo.com) - Python API framework
-- Built with [Claude Code](https://claude.ai/claude-code) by Anthropic
 
 ---
 
