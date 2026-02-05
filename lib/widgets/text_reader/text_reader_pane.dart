@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/text_reader_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../services/tts_service.dart';
+import '../tts/speaker_cards.dart';
 
 class TextReaderPane extends ConsumerStatefulWidget {
   const TextReaderPane({super.key});
@@ -102,6 +103,8 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
             children: [
               // TTS Toolbar (like PDF viewer)
               _buildTtsToolbar(context),
+              // Voice cards panel
+              const CollapsibleSpeakerCards(),
               // Header toolbar with Edit/Reset
               _buildHeaderToolbar(context, textState),
               const Divider(height: 1),
