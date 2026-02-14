@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../providers/tts_provider.dart';
-import '../../services/tts_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/log_service.dart';
+import '../../screens/about_screen.dart';
+import '../../screens/privacy_policy_screen.dart';
+import '../../screens/terms_of_service_screen.dart';
+import '../../screens/license_screen.dart';
+import '../../screens/pro_screen.dart';
 
 class SettingsDialog extends ConsumerStatefulWidget {
   const SettingsDialog({super.key});
@@ -73,15 +78,159 @@ class _SettingsDialogState extends ConsumerState<SettingsDialog> {
   }
 }
 
-class _GeneralSettingsTab extends StatelessWidget {
+class _GeneralSettingsTab extends ConsumerWidget {
   const _GeneralSettingsTab();
 
   @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Text(
-        'General settings coming soon',
-        style: TextStyle(color: Colors.grey),
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Appearance Section
+          Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.palette),
+            title: const Text('Theme'),
+            subtitle: const Text('Follow system theme'),
+            trailing: const Icon(Icons.chevron_right),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              // Theme selection would go here
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Theme follows system settings'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+          const Divider(),
+
+          // About & Legal Section
+          const SizedBox(height: 16),
+          Text('About & Legal', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('About Mayari'),
+            subtitle: const Text('Version 1.0.0'),
+            trailing: const Icon(Icons.chevron_right),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              Navigator.of(context).pop(); // Close settings dialog
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const AboutScreen()));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('Privacy Policy'),
+            trailing: const Icon(Icons.chevron_right),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Terms of Service'),
+            trailing: const Icon(Icons.chevron_right),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.article_outlined),
+            title: const Text('Licenses'),
+            trailing: const Icon(Icons.chevron_right),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const LicenseScreen()));
+            },
+          ),
+          const Divider(),
+
+          // Diagnostics section
+          const SizedBox(height: 16),
+          Text('Diagnostics', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.manage_search_rounded),
+            title: const Text('Export System Logs'),
+            subtitle: const Text('Export logs for troubleshooting'),
+            trailing: FilledButton.tonal(
+              onPressed: () async {
+                final logger = ref.read(logServiceProvider.notifier);
+                final path = await logger.exportLogs();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        path == null
+                            ? 'Failed to export logs'
+                            : 'Diagnostic logs exported to $path',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Export'),
+            ),
+            contentPadding: EdgeInsets.zero,
+          ),
+          const Divider(),
+
+          // Pro section
+          const SizedBox(height: 16),
+          Text('Pro', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.workspace_premium_rounded),
+            title: const Text('Mayari Pro'),
+            subtitle: const Text('7-day trial and Polar.sh license activation'),
+            trailing: const Icon(Icons.chevron_right),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ProScreen()));
+            },
+          ),
+          const Divider(),
+
+          // Developer Section
+          const SizedBox(height: 16),
+          Text('Developer', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.business),
+            title: const Text('Qneura.ai'),
+            subtitle: const Text('https://qneura.ai'),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Link copied: https://qneura.ai'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -200,17 +349,14 @@ class _TtsSettingsTabState extends ConsumerState<_TtsSettingsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Default Voice',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Default Voice', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: voicesAsync.when(
                   data: (voices) => DropdownButtonFormField<String>(
-                    value: _selectedVoice,
+                    initialValue: _selectedVoice,
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _selectedVoice = value);
@@ -219,16 +365,21 @@ class _TtsSettingsTabState extends ConsumerState<_TtsSettingsTab> {
                     items: voices.map((voice) {
                       return DropdownMenuItem(
                         value: voice.id,
-                        child: Text('${voice.name} (${voice.gender}, ${voice.grade})'),
+                        child: Text(
+                          '${voice.name} (${voice.gender}, ${voice.grade})',
+                        ),
                       );
                     }).toList(),
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                   ),
                   loading: () => const LinearProgressIndicator(),
-                  error: (_, __) => const Text('Error loading voices'),
+                  error: (_, error) => const Text('Error loading voices'),
                 ),
               ),
               const SizedBox(width: 8),
@@ -246,13 +397,10 @@ class _TtsSettingsTabState extends ConsumerState<_TtsSettingsTab> {
             ],
           ),
           const SizedBox(height: 24),
-          Text(
-            'Default Speed',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Default Speed', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           DropdownButtonFormField<double>(
-            value: _selectedSpeed,
+            initialValue: _selectedSpeed,
             onChanged: (value) {
               if (value != null) {
                 setState(() => _selectedSpeed = value);
@@ -261,10 +409,7 @@ class _TtsSettingsTabState extends ConsumerState<_TtsSettingsTab> {
             items: speedOptions.map((speed) {
               String label = speedDisplayName(speed);
               if (speed == 1.0) label += ' (Normal)';
-              return DropdownMenuItem(
-                value: speed,
-                child: Text(label),
-              );
+              return DropdownMenuItem(value: speed, child: Text(label));
             }).toList(),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
@@ -288,7 +433,8 @@ class _TtsSettingsTabState extends ConsumerState<_TtsSettingsTab> {
             title: const Text('Highlight current paragraph'),
             subtitle: const Text('Show visual highlight on text being read'),
             value: _highlightCurrentParagraph,
-            onChanged: (value) => setState(() => _highlightCurrentParagraph = value),
+            onChanged: (value) =>
+                setState(() => _highlightCurrentParagraph = value),
             contentPadding: EdgeInsets.zero,
           ),
           const SizedBox(height: 24),

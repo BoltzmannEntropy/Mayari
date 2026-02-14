@@ -43,6 +43,10 @@ dependencies:
   # Markdown rendering
   flutter_markdown: ^0.7.6
 
+  # External links
+  url_launcher: ^6.3.0
+  shared_preferences: ^2.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
