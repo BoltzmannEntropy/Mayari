@@ -11,22 +11,36 @@ class ProScreen extends StatefulWidget {
 
 class _ProScreenState extends State<ProScreen> {
   static const int _defaultTrialDays = 7;
+  static const String _defaultPolarCheckoutUrl = 'https://polar.sh';
+  static const String _defaultPolarPortalUrl = 'https://polar.sh';
+  static const String _defaultLemonCheckoutUrl = 'https://lemonsqueezy.com';
+  static const String _defaultLemonPortalUrl = 'https://lemonsqueezy.com';
+
   static const String _kTrialStartedAt = 'trial_started_at';
   static const String _kTrialDurationDays = 'trial_duration_days';
   static const String _kProActivated = 'pro_activated';
   static const String _kLicenseKey = 'license_key';
-  static const String _kPolarCheckout = 'polar_checkout_url';
-  static const String _kPolarPortal = 'polar_portal_url';
+  static const String _kPolarCheckoutUrl = 'polar_checkout_url';
+  static const String _kPolarPortalUrl = 'polar_portal_url';
+  static const String _kLemonCheckoutUrl = 'lemonsqueezy_checkout_url';
+  static const String _kLemonPortalUrl = 'lemonsqueezy_portal_url';
+  static const String _kLicenseProvider = 'license_provider';
 
-  final _licenseController = TextEditingController();
-  final _checkoutController = TextEditingController();
-  final _portalController = TextEditingController();
-  final _licenseFocusNode = FocusNode();
+  final TextEditingController _licenseController = TextEditingController();
+  final TextEditingController _polarCheckoutController =
+      TextEditingController();
+  final TextEditingController _polarPortalController = TextEditingController();
+  final TextEditingController _lemonCheckoutController =
+      TextEditingController();
+  final TextEditingController _lemonPortalController = TextEditingController();
+  final FocusNode _licenseFocusNode = FocusNode();
 
   bool _loading = true;
   bool _activating = false;
   bool _proActivated = false;
   int _trialDaysLeft = _defaultTrialDays;
+  int _trialDurationDays = _defaultTrialDays;
+  String _selectedProvider = 'polar';
 
   @override
   void initState() {
@@ -37,39 +51,73 @@ class _ProScreenState extends State<ProScreen> {
   @override
   void dispose() {
     _licenseController.dispose();
-    _checkoutController.dispose();
-    _portalController.dispose();
+    _polarCheckoutController.dispose();
+    _polarPortalController.dispose();
+    _lemonCheckoutController.dispose();
+    _lemonPortalController.dispose();
     _licenseFocusNode.dispose();
     super.dispose();
+  }
+
+  bool _isValidProvider(String? value) {
+    return value == 'polar' || value == 'lemonsqueezy';
+  }
+
+  String _providerLabel(String value) {
+    return value == 'lemonsqueezy' ? 'LemonSqueezy' : 'Polar';
+  }
+
+  TextEditingController _checkoutControllerFor(String provider) {
+    return provider == 'lemonsqueezy'
+        ? _lemonCheckoutController
+        : _polarCheckoutController;
+  }
+
+  TextEditingController _portalControllerFor(String provider) {
+    return provider == 'lemonsqueezy'
+        ? _lemonPortalController
+        : _polarPortalController;
   }
 
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().toUtc();
 
-    final rawStarted = prefs.getString(_kTrialStartedAt);
-    final startedAt = DateTime.tryParse(rawStarted ?? '')?.toUtc() ?? now;
-    if (rawStarted == null) {
+    final startedRaw = prefs.getString(_kTrialStartedAt);
+    final startedAt = DateTime.tryParse(startedRaw ?? '')?.toUtc() ?? now;
+    if (startedRaw == null) {
       await prefs.setString(_kTrialStartedAt, startedAt.toIso8601String());
     }
 
-    final duration = prefs.getInt(_kTrialDurationDays) ?? _defaultTrialDays;
+    final trialDays = prefs.getInt(_kTrialDurationDays) ?? _defaultTrialDays;
     if (!prefs.containsKey(_kTrialDurationDays)) {
       await prefs.setInt(_kTrialDurationDays, _defaultTrialDays);
     }
 
     final elapsed = now.difference(startedAt).inDays;
-    final daysLeft = (duration - elapsed).clamp(0, duration);
+    final daysLeft = (trialDays - elapsed).clamp(0, trialDays);
+
+    final providerRaw = prefs.getString(_kLicenseProvider);
+    final provider = _isValidProvider(providerRaw) ? providerRaw! : 'polar';
+    if (!_isValidProvider(providerRaw)) {
+      await prefs.setString(_kLicenseProvider, provider);
+    }
 
     if (!mounted) return;
     setState(() {
       _proActivated = prefs.getBool(_kProActivated) ?? false;
+      _trialDurationDays = trialDays;
       _trialDaysLeft = daysLeft;
+      _selectedProvider = provider;
       _licenseController.text = prefs.getString(_kLicenseKey) ?? '';
-      _checkoutController.text =
-          prefs.getString(_kPolarCheckout) ?? 'https://polar.sh';
-      _portalController.text =
-          prefs.getString(_kPolarPortal) ?? 'https://polar.sh';
+      _polarCheckoutController.text =
+          prefs.getString(_kPolarCheckoutUrl) ?? _defaultPolarCheckoutUrl;
+      _polarPortalController.text =
+          prefs.getString(_kPolarPortalUrl) ?? _defaultPolarPortalUrl;
+      _lemonCheckoutController.text =
+          prefs.getString(_kLemonCheckoutUrl) ?? _defaultLemonCheckoutUrl;
+      _lemonPortalController.text =
+          prefs.getString(_kLemonPortalUrl) ?? _defaultLemonPortalUrl;
       _loading = false;
     });
   }
@@ -78,7 +126,11 @@ class _ProScreenState extends State<ProScreen> {
     final key = _licenseController.text.trim();
     if (key.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid Polar license key.')),
+        SnackBar(
+          content: Text(
+            'Enter a valid ${_providerLabel(_selectedProvider)} license key.',
+          ),
+        ),
       );
       return;
     }
@@ -87,7 +139,7 @@ class _ProScreenState extends State<ProScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kLicenseKey, key);
     await prefs.setBool(_kProActivated, true);
-    await prefs.setString('license_provider', 'polar');
+    await prefs.setString(_kLicenseProvider, _selectedProvider);
     await prefs.setString(
       'license_activated_at',
       DateTime.now().toUtc().toIso8601String(),
@@ -99,24 +151,68 @@ class _ProScreenState extends State<ProScreen> {
       _activating = false;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('License activated (Polar-ready mode).')),
+      SnackBar(
+        content: Text(
+          'License activated (${_providerLabel(_selectedProvider)} mode).',
+        ),
+      ),
     );
   }
 
-  Future<void> _savePolarUrls() async {
+  Future<void> _saveProviderUrls() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kPolarCheckout, _checkoutController.text.trim());
-    await prefs.setString(_kPolarPortal, _portalController.text.trim());
+    await prefs.setString(
+      _kPolarCheckoutUrl,
+      _polarCheckoutController.text.trim(),
+    );
+    await prefs.setString(_kPolarPortalUrl, _polarPortalController.text.trim());
+    await prefs.setString(
+      _kLemonCheckoutUrl,
+      _lemonCheckoutController.text.trim(),
+    );
+    await prefs.setString(_kLemonPortalUrl, _lemonPortalController.text.trim());
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Polar URLs saved.')));
+    ).showSnackBar(const SnackBar(content: Text('Provider links saved.')));
   }
 
   Future<void> _openUrl(String rawUrl) async {
     final uri = Uri.tryParse(rawUrl.trim());
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (uri == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invalid URL.')));
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open URL.')));
+    }
+  }
+
+  Future<void> _buyLicense(String provider) async {
+    await _openUrl(_checkoutControllerFor(provider).text);
+  }
+
+  Widget _buildProviderSelector() {
+    return Wrap(
+      spacing: 10,
+      children: [
+        ChoiceChip(
+          label: const Text('Polar'),
+          selected: _selectedProvider == 'polar',
+          onSelected: (_) => setState(() => _selectedProvider = 'polar'),
+        ),
+        ChoiceChip(
+          label: const Text('LemonSqueezy'),
+          selected: _selectedProvider == 'lemonsqueezy',
+          onSelected: (_) => setState(() => _selectedProvider = 'lemonsqueezy'),
+        ),
+      ],
+    );
   }
 
   @override
@@ -125,6 +221,7 @@ class _ProScreenState extends State<ProScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final trialEnded = _trialDaysLeft <= 0;
     return Scaffold(
       appBar: AppBar(title: const Text('Mayari Pro')),
       body: ListView(
@@ -161,7 +258,9 @@ class _ProScreenState extends State<ProScreen> {
                         Text(
                           _proActivated
                               ? 'Mayari Pro Active'
-                              : 'Trial Ending Soon',
+                              : (trialEnded
+                                    ? 'Trial Ended'
+                                    : 'Trial Ending Soon'),
                           style: const TextStyle(
                             fontSize: 30,
                             fontWeight: FontWeight.w800,
@@ -169,7 +268,9 @@ class _ProScreenState extends State<ProScreen> {
                         ),
                         if (!_proActivated)
                           Text(
-                            'You have $_trialDaysLeft day${_trialDaysLeft == 1 ? '' : 's'} left in your trial',
+                            trialEnded
+                                ? 'Your $_trialDurationDays-day trial has ended'
+                                : 'You have $_trialDaysLeft day${_trialDaysLeft == 1 ? '' : 's'} left in your trial',
                           ),
                       ],
                     ),
@@ -178,14 +279,19 @@ class _ProScreenState extends State<ProScreen> {
                 if (!_proActivated)
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: [
                       FilledButton.tonal(
                         onPressed: () => _licenseFocusNode.requestFocus(),
                         child: const Text('Enter License'),
                       ),
                       FilledButton(
-                        onPressed: () => _openUrl(_checkoutController.text),
-                        child: const Text('Buy License'),
+                        onPressed: () => _buyLicense('polar'),
+                        child: const Text('Buy with Polar'),
+                      ),
+                      FilledButton(
+                        onPressed: () => _buyLicense('lemonsqueezy'),
+                        child: const Text('Buy with LemonSqueezy'),
                       ),
                     ],
                   ),
@@ -204,15 +310,18 @@ class _ProScreenState extends State<ProScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
+                  _buildProviderSelector(),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: _licenseController,
                           focusNode: _licenseFocusNode,
-                          decoration: const InputDecoration(
-                            hintText: 'Enter your Polar license key',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            hintText:
+                                'Enter your ${_providerLabel(_selectedProvider)} license key',
+                            border: const OutlineInputBorder(),
                             isDense: true,
                           ),
                         ),
@@ -234,9 +343,10 @@ class _ProScreenState extends State<ProScreen> {
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
-                    onPressed: () => _openUrl(_portalController.text),
+                    onPressed: () =>
+                        _openUrl(_portalControllerFor(_selectedProvider).text),
                     icon: const Icon(Icons.manage_accounts_rounded),
-                    label: const Text('License Portal'),
+                    label: Text('${_providerLabel(_selectedProvider)} Portal'),
                   ),
                 ],
               ),
@@ -250,12 +360,12 @@ class _ProScreenState extends State<ProScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Polar Configuration',
+                    'Licensing Provider Configuration',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: _checkoutController,
+                    controller: _polarCheckoutController,
                     decoration: const InputDecoration(
                       labelText: 'Polar Checkout URL',
                       hintText: 'https://polar.sh/checkout/...',
@@ -264,17 +374,35 @@ class _ProScreenState extends State<ProScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: _portalController,
+                    controller: _polarPortalController,
                     decoration: const InputDecoration(
                       labelText: 'Polar Customer Portal URL',
                       hintText: 'https://polar.sh/portal/...',
                       border: OutlineInputBorder(),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _lemonCheckoutController,
+                    decoration: const InputDecoration(
+                      labelText: 'LemonSqueezy Checkout URL',
+                      hintText: 'https://lemonsqueezy.com/checkout/...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _lemonPortalController,
+                    decoration: const InputDecoration(
+                      labelText: 'LemonSqueezy Customer Portal URL',
+                      hintText: 'https://app.lemonsqueezy.com/my-orders/...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   FilledButton.tonal(
-                    onPressed: _savePolarUrls,
-                    child: const Text('Save Polar URLs'),
+                    onPressed: _saveProviderUrls,
+                    child: const Text('Save Provider URLs'),
                   ),
                 ],
               ),

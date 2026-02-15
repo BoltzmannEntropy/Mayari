@@ -200,7 +200,9 @@ class _GeneralSettingsTab extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.workspace_premium_rounded),
             title: const Text('Mayari Pro'),
-            subtitle: const Text('7-day trial and Polar.sh license activation'),
+            subtitle: const Text(
+              '7-day trial with Polar.sh and LemonSqueezy license activation',
+            ),
             trailing: const Icon(Icons.chevron_right),
             contentPadding: EdgeInsets.zero,
             onTap: () {
