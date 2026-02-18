@@ -11,6 +11,9 @@ PODS:
   - just_audio (0.0.1):
     - Flutter
     - FlutterMacOS
+  - shared_preferences_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
   - syncfusion_pdfviewer_macos (0.0.1):
     - FlutterMacOS
   - url_launcher_macos (0.0.1):
@@ -23,6 +26,7 @@ DEPENDENCIES:
   - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - just_audio (from `Flutter/ephemeral/.symlinks/plugins/just_audio/darwin`)
+  - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
   - syncfusion_pdfviewer_macos (from `Flutter/ephemeral/.symlinks/plugins/syncfusion_pdfviewer_macos/macos`)
   - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
 
@@ -39,6 +43,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
   just_audio:
     :path: Flutter/ephemeral/.symlinks/plugins/just_audio/darwin
+  shared_preferences_foundation:
+    :path: Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin
   syncfusion_pdfviewer_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/syncfusion_pdfviewer_macos/macos
   url_launcher_macos:
@@ -51,6 +57,7 @@ SPEC CHECKSUMS:
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
+  shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   syncfusion_pdfviewer_macos: b3b110c68039178ca4105dd03ef38761eca3b36b
   url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
 
