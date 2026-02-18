@@ -9,6 +9,7 @@ import '../../screens/about_screen.dart';
 import '../../screens/privacy_policy_screen.dart';
 import '../../screens/terms_of_service_screen.dart';
 import '../../screens/license_screen.dart';
+import '../../screens/mcp_screen.dart';
 import '../../screens/pro_screen.dart';
 
 class SettingsDialog extends ConsumerStatefulWidget {
@@ -167,6 +168,19 @@ class _GeneralSettingsTab extends ConsumerWidget {
           const SizedBox(height: 16),
           Text('Diagnostics', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.hub_rounded),
+            title: const Text('MCP Integration'),
+            subtitle: const Text('View MCP server status and tool list'),
+            trailing: const Icon(Icons.chevron_right),
+            contentPadding: EdgeInsets.zero,
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const McpScreen()));
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.manage_search_rounded),
             title: const Text('Export System Logs'),

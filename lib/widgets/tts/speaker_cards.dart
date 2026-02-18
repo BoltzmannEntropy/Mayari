@@ -29,7 +29,7 @@ class SpeakerCard extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: isSelected
-              ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5)
+              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5)
               : Theme.of(context).colorScheme.surface,
           border: Border.all(
             color: isSelected

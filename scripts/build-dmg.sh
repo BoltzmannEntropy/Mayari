@@ -92,6 +92,23 @@ mkdir -p "$DMG_DIR"
 cp -R "$RELEASE_DIR/$APP_NAME.app" "$DMG_DIR/"
 print_status "App copied to DMG staging"
 
+# Embed license files in the app bundle
+RESOURCES_DIR="$DMG_DIR/$APP_NAME.app/Contents/Resources"
+if [ -f "$PROJECT_DIR/LICENSE" ]; then
+    cp "$PROJECT_DIR/LICENSE" "$RESOURCES_DIR/LICENSE"
+fi
+if [ -f "$PROJECT_DIR/BINARY-LICENSE.txt" ]; then
+    cp "$PROJECT_DIR/BINARY-LICENSE.txt" "$RESOURCES_DIR/BINARY-LICENSE.txt"
+fi
+
+# Copy license files to DMG root
+if [ -f "$PROJECT_DIR/LICENSE" ]; then
+    cp "$PROJECT_DIR/LICENSE" "$DMG_DIR/LICENSE"
+fi
+if [ -f "$PROJECT_DIR/BINARY-LICENSE.txt" ]; then
+    cp "$PROJECT_DIR/BINARY-LICENSE.txt" "$DMG_DIR/BINARY-LICENSE.txt"
+fi
+
 # Copy backend files
 mkdir -p "$DMG_DIR/Backend"
 cp -R "$PROJECT_DIR/backend/"* "$DMG_DIR/Backend/"

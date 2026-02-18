@@ -562,9 +562,25 @@ S. Kashani, "Mayari: PDF Quote Extraction Tool for Academic Research," Johns Hop
 
 ---
 
+## Star History
+
+<a href="https://star-history.com/#BoltzmannEntropy/Mayari&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=BoltzmannEntropy/Mayari&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=BoltzmannEntropy/Mayari&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=BoltzmannEntropy/Mayari&type=Date" />
+ </picture>
+</a>
+
+---
+
 ## License
 
-MIT License - feel free to use, modify, and distribute.
+- Source code: Business Source License 1.1 (`LICENSE`)
+- Binary distribution: Binary Distribution License (`BINARY-LICENSE.txt`)
+- Overview: `LICENSE.md`
+
+The official DMG/executable binaries may not be used commercially or redistributed.
 
 ---
 

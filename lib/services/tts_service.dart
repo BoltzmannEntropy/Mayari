@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 
@@ -35,7 +34,13 @@ class TtsVoice {
 
 /// Available British voices (fallback if server unavailable)
 const List<TtsVoice> defaultVoices = [
-  TtsVoice(id: 'bf_emma', name: 'Emma', gender: 'female', grade: 'B-', isDefault: true),
+  TtsVoice(
+    id: 'bf_emma',
+    name: 'Emma',
+    gender: 'female',
+    grade: 'B-',
+    isDefault: true,
+  ),
   TtsVoice(id: 'bf_isabella', name: 'Isabella', gender: 'female', grade: 'C'),
   TtsVoice(id: 'bf_alice', name: 'Alice', gender: 'female', grade: 'D'),
   TtsVoice(id: 'bf_lily', name: 'Lily', gender: 'female', grade: 'D'),
@@ -47,8 +52,16 @@ const List<TtsVoice> defaultVoices = [
 
 /// Service for managing Kokoro TTS server and audio playback
 class TtsService {
-  static const int _serverPort = 8787;
-  static const String _serverHost = '127.0.0.1';
+  static const int _defaultServerPort = 8787;
+  static const String _defaultServerHost = '127.0.0.1';
+  static const int _serverPort = int.fromEnvironment(
+    'MAYARI_BACKEND_PORT',
+    defaultValue: _defaultServerPort,
+  );
+  static const String _serverHost = String.fromEnvironment(
+    'MAYARI_BACKEND_HOST',
+    defaultValue: _defaultServerHost,
+  );
 
   final AudioPlayer _audioPlayer = AudioPlayer();
 
@@ -96,12 +109,21 @@ class TtsService {
   }
 
   /// Synthesize text to speech and play it
-  Future<bool> speak(String text, {String voice = 'bf_emma', double speed = 1.0}) async {
-    print('TTS: speak() called with ${text.length} chars, voice=$voice, speed=$speed');
+  Future<bool> speak(
+    String text, {
+    String voice = 'bf_emma',
+    double speed = 1.0,
+  }) async {
+    print(
+      'TTS: speak() called with ${text.length} chars, voice=$voice, speed=$speed',
+    );
 
     // Check if server is running
     if (!await isServerHealthy()) {
-      print('TTS Error: Server not running. Start it with: mayarictl tts start');
+      print(
+        'TTS Error: Mayari audio service is unavailable at $_baseUrl. '
+        'Use the in-app MCP/diagnostics tools or restart the app.',
+      );
       return false;
     }
 
@@ -111,15 +133,17 @@ class TtsService {
       print('TTS: Sending synthesis request...');
 
       // Request synthesis using new API
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/kokoro/generate'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'text': truncatedText,
-          'voice': voice,
-          'speed': speed,
-        }),
-      ).timeout(const Duration(seconds: 60));
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/api/kokoro/generate'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'text': truncatedText,
+              'voice': voice,
+              'speed': speed,
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
 
       if (response.statusCode != 200) {
         print('TTS Error: Synthesis failed with status ${response.statusCode}');

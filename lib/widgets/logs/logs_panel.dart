@@ -209,7 +209,7 @@ class LogsPanel extends ConsumerWidget {
             height: 16,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: levelColor.withOpacity(0.2),
+              color: levelColor.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
