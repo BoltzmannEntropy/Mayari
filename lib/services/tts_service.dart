@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'backend_service.dart';
 
 /// Voice metadata for Kokoro British voices
 class TtsVoice {
@@ -64,6 +66,7 @@ class TtsService {
   );
 
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final BackendService _backendService = BackendService();
 
   /// Stream of player state changes
   Stream<PlayerState> get playerStateStream => _audioPlayer.playerStateStream;
@@ -77,16 +80,42 @@ class TtsService {
   /// Get the base URL for the TTS server
   String get _baseUrl => 'http://$_serverHost:$_serverPort';
 
-  /// Check if the server is responding
-  Future<bool> isServerHealthy() async {
+  Future<bool> _checkServerHealth({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
     try {
       final response = await http
           .get(Uri.parse('$_baseUrl/health'))
-          .timeout(const Duration(seconds: 2));
+          .timeout(timeout);
       return response.statusCode == 200;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Check if the server is responding and autostart bundled backend when needed.
+  Future<bool> isServerHealthy({bool attemptAutoStart = true}) async {
+    if (await _checkServerHealth()) {
+      return true;
+    }
+
+    if (!attemptAutoStart) {
+      return false;
+    }
+
+    final started = await _backendService.ensureBackendRunning();
+    if (!started) {
+      return false;
+    }
+
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (DateTime.now().isBefore(deadline)) {
+      if (await _checkServerHealth(timeout: const Duration(seconds: 1))) {
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    return false;
   }
 
   /// Get available voices from the server
@@ -102,7 +131,7 @@ class TtsService {
         return voiceList.map((v) => TtsVoice.fromJson(v)).toList();
       }
     } catch (e) {
-      print('TTS: Failed to fetch voices: $e');
+      debugPrint('TTS: Failed to fetch voices: $e');
     }
 
     return defaultVoices.toList();
@@ -114,23 +143,25 @@ class TtsService {
     String voice = 'bf_emma',
     double speed = 1.0,
   }) async {
-    print(
+    debugPrint(
       'TTS: speak() called with ${text.length} chars, voice=$voice, speed=$speed',
     );
 
     // Check if server is running
-    if (!await isServerHealthy()) {
-      print(
+    if (!await isServerHealthy(attemptAutoStart: true)) {
+      debugPrint(
         'TTS Error: Mayari audio service is unavailable at $_baseUrl. '
-        'Use the in-app MCP/diagnostics tools or restart the app.',
+        'Status: ${_backendService.currentStatus}',
       );
       return false;
     }
 
     try {
-      // Truncate text if too long
-      final truncatedText = text.length > 5000 ? text.substring(0, 5000) : text;
-      print('TTS: Sending synthesis request...');
+      // Keep request payload bounded; backend will chunk for synthesis.
+      final truncatedText = text.length > 20000
+          ? text.substring(0, 20000)
+          : text;
+      debugPrint('TTS: Sending synthesis request...');
 
       // Request synthesis using new API
       final response = await http
@@ -141,13 +172,18 @@ class TtsService {
               'text': truncatedText,
               'voice': voice,
               'speed': speed,
+              'smart_chunking': true,
+              'max_chars_per_chunk': 1500,
+              'crossfade_ms': 40,
             }),
           )
-          .timeout(const Duration(seconds: 60));
+          .timeout(const Duration(seconds: 120));
 
       if (response.statusCode != 200) {
-        print('TTS Error: Synthesis failed with status ${response.statusCode}');
-        print('TTS Error: Response body: ${response.body}');
+        debugPrint(
+          'TTS Error: Synthesis failed with status ${response.statusCode}',
+        );
+        debugPrint('TTS Error: Response body: ${response.body}');
         return false;
       }
 
@@ -155,15 +191,15 @@ class TtsService {
       final audioUrl = data['audio_url'] as String;
       final fullUrl = '$_baseUrl$audioUrl';
 
-      print('TTS: Got audio URL: $fullUrl');
+      debugPrint('TTS: Got audio URL: $fullUrl');
 
       // Play the audio from URL
       await _audioPlayer.setUrl(fullUrl);
       await _audioPlayer.play();
-      print('TTS: Playing audio...');
+      debugPrint('TTS: Playing audio...');
       return true;
     } catch (e) {
-      print('TTS Error: Failed to synthesize/play: $e');
+      debugPrint('TTS Error: Failed to synthesize/play: $e');
       return false;
     }
   }
@@ -195,6 +231,33 @@ class TtsService {
 
   /// Check if currently playing
   bool get isPlaying => _audioPlayer.playing;
+
+  /// Extract text from PDF bytes using the backend PDF extraction endpoint.
+  Future<String> extractPdfText(
+    Uint8List bytes, {
+    String filename = 'document.pdf',
+  }) async {
+    final safeFilename = filename.toLowerCase().endsWith('.pdf')
+        ? filename
+        : '$filename.pdf';
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/api/pdf/extract-text'),
+    );
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: safeFilename),
+    );
+
+    final streamed = await request.send().timeout(const Duration(seconds: 90));
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return (data['text'] as String?) ?? '';
+    }
+    throw Exception(
+      'PDF extraction failed (${response.statusCode}): ${response.body}',
+    );
+  }
 
   /// Dispose resources
   Future<void> dispose() async {

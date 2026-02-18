@@ -20,17 +20,29 @@ class WorkspaceScreen extends ConsumerStatefulWidget {
 class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   static const double _libraryWidth = 200;
   double _splitPosition = 0.55; // Position between PDF viewer and quotes panel
+  final FocusNode _keyboardFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _keyboardFocusNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _keyboardFocusNode.dispose();
+    super.dispose();
+  }
 
   Widget _buildContentToggle(BuildContext context, ContentSource source) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 1,
-          ),
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1),
         ),
       ),
       child: Row(
@@ -54,9 +66,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   selection.first;
             },
             showSelectedIcon: false,
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-            ),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
           ),
         ],
       ),
@@ -65,7 +75,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
-      final isCmd = HardwareKeyboard.instance.isMetaPressed ||
+      final isCmd =
+          HardwareKeyboard.instance.isMetaPressed ||
           HardwareKeyboard.instance.isControlPressed;
 
       if (isCmd && event.logicalKey == LogicalKeyboardKey.keyH) {
@@ -79,21 +90,22 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
         final page = ref.read(currentPageProvider);
 
         if (source != null && text != null && text.isNotEmpty) {
-          ref.read(sourcesProvider.notifier).addQuote(
-                sourceId: source.id,
-                text: text,
-                pageNumber: page,
-              ).then((added) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  added ? 'Quote added from page $page' : 'Quote already saved',
-                ),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          });
+          ref
+              .read(sourcesProvider.notifier)
+              .addQuote(sourceId: source.id, text: text, pageNumber: page)
+              .then((added) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      added
+                          ? 'Quote added from page $page'
+                          : 'Quote already saved',
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              });
         }
       }
     }
@@ -104,13 +116,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     final activeSource = ref.watch(activeSourceProvider);
 
     return KeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
+      focusNode: _keyboardFocusNode,
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(activeSource != null
-              ? 'Mayari - ${activeSource.title}'
-              : 'Mayari'),
+          title: Text(
+            activeSource != null ? 'Mayari - ${activeSource.title}' : 'Mayari',
+          ),
           centerTitle: false,
           actions: [
             if (activeSource != null)
@@ -166,7 +178,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         child: GestureDetector(
                           onHorizontalDragUpdate: (details) {
                             setState(() {
-                              _splitPosition += details.delta.dx / availableWidth;
+                              _splitPosition +=
+                                  details.delta.dx / availableWidth;
                               _splitPosition = _splitPosition.clamp(0.3, 0.75);
                             });
                           },

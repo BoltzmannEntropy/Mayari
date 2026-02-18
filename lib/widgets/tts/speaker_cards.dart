@@ -29,7 +29,9 @@ class SpeakerCard extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: isSelected
-              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5)
+              ? Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.5)
               : Theme.of(context).colorScheme.surface,
           border: Border.all(
             color: isSelected
@@ -75,9 +77,9 @@ class SpeakerCard extends StatelessWidget {
             Text(
               voice.grade,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[500],
-                    fontSize: 9,
-                  ),
+                color: Colors.grey[500],
+                fontSize: 9,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -143,9 +145,12 @@ class SpeakerCardsPanel extends ConsumerWidget {
           ),
         ),
       ),
-      error: (_, __) => Container(
+      error: (_, _) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: const Text('Error loading voices', style: TextStyle(fontSize: 11)),
+        child: const Text(
+          'Error loading voices',
+          style: TextStyle(fontSize: 11),
+        ),
       ),
     );
   }
@@ -187,9 +192,9 @@ class _CollapsibleSpeakerCardsState
                 const SizedBox(width: 6),
                 Text(
                   'Voice',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const Spacer(),
                 // Show current voice when collapsed
@@ -210,7 +215,7 @@ class _CollapsibleSpeakerCardsState
                           );
                         },
                         loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
+                        error: (_, _) => const SizedBox.shrink(),
                       );
                     },
                   ),

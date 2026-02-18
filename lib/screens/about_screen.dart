@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../version.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'license_screen.dart';
@@ -9,7 +10,6 @@ class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
   static const String _appName = 'Mayari';
-  static const String _version = '1.0.0';
   static const String _author = 'QNeura.ai';
   static const String _authorUrl = 'https://qneura.ai';
   static const String _copyright = '2025 QNeura.ai. All rights reserved.';
@@ -66,7 +66,7 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Version $_version',
+                  'Version $appVersion',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(color: Colors.grey),

@@ -8,26 +8,45 @@ final logsPanelVisibleProvider = StateProvider<bool>((ref) => true);
 /// Provider for logs panel height
 final logsPanelHeightProvider = StateProvider<double>((ref) => 150);
 
-class LogsPanel extends ConsumerWidget {
+class LogsPanel extends ConsumerStatefulWidget {
   const LogsPanel({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LogsPanel> createState() => _LogsPanelState();
+}
+
+class _LogsPanelState extends ConsumerState<LogsPanel> {
+  late final ScrollController _logScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _logScrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _logScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final logs = ref.watch(logServiceProvider);
     final isVisible = ref.watch(logsPanelVisibleProvider);
     final panelHeight = ref.watch(logsPanelHeightProvider);
 
     if (!isVisible) {
-      return _buildCollapsedBar(context, ref);
+      return _buildCollapsedBar(context);
     }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Resize handle
-        _buildResizeHandle(context, ref),
+        _buildResizeHandle(context),
         // Header bar
-        _buildHeader(context, ref),
+        _buildHeader(context),
         // Log content
         Container(
           height: panelHeight,
@@ -45,7 +64,7 @@ class LogsPanel extends ConsumerWidget {
                   ),
                 )
               : ListView.builder(
-                  controller: ScrollController(),
+                  controller: _logScrollController,
                   reverse: true,
                   itemCount: logs.length,
                   itemBuilder: (context, index) {
@@ -58,14 +77,12 @@ class LogsPanel extends ConsumerWidget {
     );
   }
 
-  Widget _buildCollapsedBar(BuildContext context, WidgetRef ref) {
+  Widget _buildCollapsedBar(BuildContext context) {
     return Container(
       height: 28,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
-        ),
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         children: [
@@ -78,24 +95,23 @@ class LogsPanel extends ConsumerWidget {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
-          Text(
-            'System Logs',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          Text('System Logs', style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
   }
 
-  Widget _buildResizeHandle(BuildContext context, WidgetRef ref) {
+  Widget _buildResizeHandle(BuildContext context) {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeRow,
       child: GestureDetector(
         onVerticalDragUpdate: (details) {
           final currentHeight = ref.read(logsPanelHeightProvider);
           final newHeight = currentHeight - details.delta.dy;
-          ref.read(logsPanelHeightProvider.notifier).state =
-              newHeight.clamp(80, 400);
+          ref.read(logsPanelHeightProvider.notifier).state = newHeight.clamp(
+            80,
+            400,
+          );
         },
         child: Container(
           height: 6,
@@ -115,7 +131,7 @@ class LogsPanel extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, WidgetRef ref) {
+  Widget _buildHeader(BuildContext context) {
     final logService = ref.read(logServiceProvider.notifier);
 
     return Container(
@@ -135,10 +151,7 @@ class LogsPanel extends ConsumerWidget {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
-          Text(
-            'System Logs',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          Text('System Logs', style: Theme.of(context).textTheme.titleSmall),
           const Spacer(),
           // Clear logs
           IconButton(
@@ -197,10 +210,10 @@ class LogsPanel extends ConsumerWidget {
           Text(
             entry.formattedTime,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey,
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                ),
+              color: Colors.grey,
+              fontFamily: 'monospace',
+              fontSize: 11,
+            ),
           ),
           const SizedBox(width: 8),
           // Level indicator
@@ -228,9 +241,9 @@ class LogsPanel extends ConsumerWidget {
             child: Text(
               entry.source,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                  ),
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -239,9 +252,9 @@ class LogsPanel extends ConsumerWidget {
             child: Text(
               entry.message,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  ),
+                fontSize: 11,
+                fontFamily: 'monospace',
+              ),
             ),
           ),
         ],

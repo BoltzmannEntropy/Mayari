@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import '../services/backend_service.dart';
 import '../services/log_service.dart';
 import '../services/tts_service.dart';
 
@@ -46,12 +47,14 @@ class TtsState {
       playbackState: playbackState ?? this.playbackState,
       currentVoice: currentVoice ?? this.currentVoice,
       speed: speed ?? this.speed,
-      currentParagraphIndex: currentParagraphIndex ?? this.currentParagraphIndex,
+      currentParagraphIndex:
+          currentParagraphIndex ?? this.currentParagraphIndex,
       totalParagraphs: totalParagraphs ?? this.totalParagraphs,
       paragraphs: paragraphs ?? this.paragraphs,
       errorMessage: errorMessage,
       autoAdvancePages: autoAdvancePages ?? this.autoAdvancePages,
-      highlightCurrentParagraph: highlightCurrentParagraph ?? this.highlightCurrentParagraph,
+      highlightCurrentParagraph:
+          highlightCurrentParagraph ?? this.highlightCurrentParagraph,
     );
   }
 
@@ -80,7 +83,8 @@ class TtsSettings {
       defaultVoice: json['defaultVoice'] as String? ?? 'bf_emma',
       defaultSpeed: (json['defaultSpeed'] as num?)?.toDouble() ?? 1.0,
       autoAdvancePages: json['autoAdvancePages'] as bool? ?? true,
-      highlightCurrentParagraph: json['highlightCurrentParagraph'] as bool? ?? true,
+      highlightCurrentParagraph:
+          json['highlightCurrentParagraph'] as bool? ?? true,
     );
   }
 
@@ -101,15 +105,53 @@ final ttsServiceProvider = Provider<TtsService>((ref) {
   return service;
 });
 
+/// Provider for backend startup/status messages.
+final backendStatusProvider = StreamProvider.autoDispose<String>((ref) {
+  final backend = BackendService();
+  final controller = StreamController<String>();
+  controller.add(backend.currentStatus);
+  final sub = backend.statusStream.listen(controller.add);
+  ref.onDispose(() {
+    sub.cancel();
+    controller.close();
+  });
+  return controller.stream;
+});
+
 /// Provider for TTS server status (checks periodically)
-final ttsServerStatusProvider = StreamProvider<bool>((ref) async* {
+final ttsServerStatusProvider = StreamProvider.autoDispose<bool>((ref) async* {
   final service = ref.watch(ttsServiceProvider);
-  // Initial check
-  yield await service.isServerHealthy();
-  // Periodic checks every 5 seconds
-  await for (final _ in Stream.periodic(const Duration(seconds: 5))) {
-    yield await service.isServerHealthy();
+  final controller = StreamController<bool>();
+  var isActive = true;
+
+  Future<void> emitHealth() async {
+    if (!isActive) {
+      return;
+    }
+    try {
+      controller.add(await service.isServerHealthy());
+    } catch (_) {
+      controller.add(false);
+    }
   }
+
+  // Emit immediately for first paint.
+  await emitHealth();
+
+  unawaited(
+    Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(seconds: 5));
+      await emitHealth();
+      return isActive;
+    }),
+  );
+
+  ref.onDispose(() {
+    isActive = false;
+    controller.close();
+  });
+
+  yield* controller.stream;
 });
 
 /// Provider for available voices
@@ -183,14 +225,20 @@ class TtsNotifier extends StateNotifier<TtsState> {
   void setContent(String text) {
     _log.info('TTS', 'Setting content: ${text.length} chars');
 
-    // Split text into paragraphs (by double newlines or significant breaks)
-    final paragraphs = text
+    final normalizedText = text
+        .replaceAll('\u00A0', ' ')
+        .replaceAll('\r', '\n')
+        .replaceAll(RegExp(r'[ \t]+'), ' ')
+        .trim();
+
+    // Split text into paragraphs (by double newlines or significant breaks).
+    final paragraphs = normalizedText
         .split(RegExp(r'\n\s*\n'))
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
         .toList();
 
-    // If no paragraph breaks, split by sentences for better chunking
+    // If we have a single long block, split by sentence and then by target size.
     if (paragraphs.length == 1 && paragraphs[0].length > 500) {
       final sentences = paragraphs[0]
           .split(RegExp(r'(?<=[.!?])\s+'))
@@ -198,15 +246,21 @@ class TtsNotifier extends StateNotifier<TtsState> {
           .where((s) => s.isNotEmpty)
           .toList();
 
-      // Group sentences into chunks of ~3-5 sentences
+      const targetChunkChars = 900;
       final chunks = <String>[];
-      var currentChunk = <String>[];
+      final currentChunk = <String>[];
+      var currentChars = 0;
+
       for (final sentence in sentences) {
-        currentChunk.add(sentence);
-        if (currentChunk.length >= 3) {
+        final sentenceLen = sentence.length + (currentChunk.isEmpty ? 0 : 1);
+        if (currentChunk.isNotEmpty &&
+            (currentChars + sentenceLen > targetChunkChars)) {
           chunks.add(currentChunk.join(' '));
-          currentChunk = [];
+          currentChunk.clear();
+          currentChars = 0;
         }
+        currentChunk.add(sentence);
+        currentChars += sentenceLen;
       }
       if (currentChunk.isNotEmpty) {
         chunks.add(currentChunk.join(' '));
@@ -231,7 +285,10 @@ class TtsNotifier extends StateNotifier<TtsState> {
   /// Start playing from the current paragraph
   Future<void> play() async {
     _log.info('TTS', 'Starting playback');
-    _log.debug('TTS', 'paragraphs=${state.paragraphs.length}, currentIndex=${state.currentParagraphIndex}');
+    _log.debug(
+      'TTS',
+      'paragraphs=${state.paragraphs.length}, currentIndex=${state.currentParagraphIndex}',
+    );
 
     if (state.paragraphs.isEmpty) {
       _log.warning('TTS', 'No paragraphs to play');
@@ -246,7 +303,10 @@ class TtsNotifier extends StateNotifier<TtsState> {
 
     final text = state.paragraphs[state.currentParagraphIndex];
     final preview = text.length > 50 ? '${text.substring(0, 50)}...' : text;
-    _log.info('TTS', 'Playing paragraph ${state.currentParagraphIndex + 1}/${state.paragraphs.length}: "$preview"');
+    _log.info(
+      'TTS',
+      'Playing paragraph ${state.currentParagraphIndex + 1}/${state.paragraphs.length}: "$preview"',
+    );
 
     final success = await _service.speak(
       text,

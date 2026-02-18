@@ -109,15 +109,13 @@ if [ -f "$PROJECT_DIR/BINARY-LICENSE.txt" ]; then
     cp "$PROJECT_DIR/BINARY-LICENSE.txt" "$DMG_DIR/BINARY-LICENSE.txt"
 fi
 
-# Copy backend files
-mkdir -p "$DMG_DIR/Backend"
-cp -R "$PROJECT_DIR/backend/"* "$DMG_DIR/Backend/"
-print_status "Backend files copied"
-
-# Copy mayarictl
-cp "$PROJECT_DIR/bin/mayarictl" "$DMG_DIR/"
-chmod +x "$DMG_DIR/mayarictl"
-print_status "mayarictl copied"
+# Embed backend runtime into app bundle resources for first-run autostart.
+mkdir -p "$RESOURCES_DIR/backend"
+cp -R "$PROJECT_DIR/backend/." "$RESOURCES_DIR/backend/"
+rm -rf "$RESOURCES_DIR/backend/outputs" \
+       "$RESOURCES_DIR/backend/__pycache__" \
+       "$RESOURCES_DIR/backend/.pytest_cache"
+print_status "Bundled backend copied into app resources"
 
 # Create README for DMG
 cat > "$DMG_DIR/README.txt" << 'EOF'
@@ -126,20 +124,8 @@ Mayari PDF Reader with Kokoro TTS
 
 Installation:
 1. Drag "Mayari.app" to your Applications folder
-2. Copy the "Backend" folder to ~/Library/Application Support/Mayari/
-3. Copy "mayarictl" to /usr/local/bin/ (optional, for CLI access)
-
-First-time Setup:
-1. Open Terminal
-2. Run: mayarictl install  (or use the Backend setup)
-3. Run: mayarictl tts start
-4. Launch Mayari.app
-
-Usage:
-- mayarictl start    - Start both TTS server and app
-- mayarictl tts start - Start TTS server only
-- mayarictl run      - Run the app only
-- mayarictl help     - Show all commands
+2. Launch "Mayari.app" from Applications
+3. The bundled audio backend starts automatically in-app
 
 Note: The Kokoro TTS model will download automatically on first use.
 This requires ~500MB of disk space and internet connection.
@@ -170,9 +156,7 @@ if [ "$HAS_CREATE_DMG" = true ]; then
         --icon-size 100 \
         --icon "$APP_NAME.app" 150 190 \
         --icon "Applications" 450 190 \
-        --icon "Backend" 300 300 \
-        --icon "mayarictl" 150 300 \
-        --icon "README.txt" 450 300 \
+        --icon "README.txt" 300 300 \
         --hide-extension "$APP_NAME.app" \
         --app-drop-link 450 190 \
         "$DMG_OUTPUT" \
@@ -194,7 +178,34 @@ fi
 print_status "DMG created: $DMG_OUTPUT"
 
 echo ""
-echo "Step 4: Cleanup..."
+echo "Step 4: Generating Checksums..."
+echo "--------------------------------"
+
+# Create dist directory for release artifacts
+DIST_DIR="$PROJECT_DIR/dist"
+mkdir -p "$DIST_DIR"
+
+# Move DMG to dist directory
+DMG_FINAL="$DIST_DIR/${DMG_NAME}-${VERSION}.dmg"
+mv "$DMG_OUTPUT" "$DMG_FINAL"
+
+# Generate SHA256 checksum
+cd "$DIST_DIR"
+shasum -a 256 "$(basename "$DMG_FINAL")" > "$(basename "$DMG_FINAL").sha256"
+SHA256=$(awk '{print $1}' "$(basename "$DMG_FINAL").sha256")
+print_status "SHA256 checksum generated"
+
+# Copy release notes if present
+RELEASE_NOTES_SRC="$PROJECT_DIR/RELEASE_NOTES.md"
+RELEASE_NOTES_NAME="${DMG_NAME}-${VERSION}-RELEASE_NOTES.md"
+if [ -f "$RELEASE_NOTES_SRC" ]; then
+    cp "$RELEASE_NOTES_SRC" "$DIST_DIR/$RELEASE_NOTES_NAME"
+    shasum -a 256 "$RELEASE_NOTES_NAME" > "$RELEASE_NOTES_NAME.sha256"
+    print_status "Release notes copied"
+fi
+
+echo ""
+echo "Step 5: Cleanup..."
 echo "-------------------"
 
 # Optionally clean up staging directory
@@ -206,9 +217,13 @@ echo "========================================"
 echo "Build Complete!"
 echo "========================================"
 echo ""
-echo "DMG file: $DMG_OUTPUT"
-echo "Size: $(du -h "$DMG_OUTPUT" | cut -f1)"
+echo "DMG file: $DMG_FINAL"
+echo "Size: $(du -h "$DMG_FINAL" | cut -f1)"
+echo "SHA256: $SHA256"
+echo ""
+echo "Release artifacts in: $DIST_DIR"
+ls -la "$DIST_DIR"
 echo ""
 echo "To test the DMG:"
-echo "  open $DMG_OUTPUT"
+echo "  open $DMG_FINAL"
 echo ""

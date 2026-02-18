@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -60,7 +61,7 @@ class LogService extends StateNotifier<List<LogEntry>> {
     );
 
     // Also print to console for debugging
-    print(entry.toString());
+    debugPrint(entry.toString());
 
     state = [...state, entry];
 
@@ -70,10 +71,14 @@ class LogService extends StateNotifier<List<LogEntry>> {
     }
   }
 
-  void debug(String source, String message) => log(LogLevel.debug, source, message);
-  void info(String source, String message) => log(LogLevel.info, source, message);
-  void warning(String source, String message) => log(LogLevel.warning, source, message);
-  void error(String source, String message) => log(LogLevel.error, source, message);
+  void debug(String source, String message) =>
+      log(LogLevel.debug, source, message);
+  void info(String source, String message) =>
+      log(LogLevel.info, source, message);
+  void warning(String source, String message) =>
+      log(LogLevel.warning, source, message);
+  void error(String source, String message) =>
+      log(LogLevel.error, source, message);
 
   void clear() {
     state = [];
@@ -108,7 +113,9 @@ class LogService extends StateNotifier<List<LogEntry>> {
 }
 
 /// Provider for log service
-final logServiceProvider = StateNotifierProvider<LogService, List<LogEntry>>((ref) {
+final logServiceProvider = StateNotifierProvider<LogService, List<LogEntry>>((
+  ref,
+) {
   return LogService();
 });
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,11 +11,9 @@ import '../../providers/library_provider.dart';
 import '../../providers/pdf_provider.dart';
 import '../../providers/sources_provider.dart';
 import '../../providers/tts_provider.dart';
-import '../../services/tts_service.dart';
 import '../dialogs/source_metadata_dialog.dart';
 import '../dialogs/settings_dialog.dart';
 import '../tts/speaker_cards.dart';
-import '../tts/tts_toolbar.dart';
 
 class PdfViewerPane extends ConsumerStatefulWidget {
   const PdfViewerPane({super.key});
@@ -34,6 +33,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
   PdfTextSearchResult? _searchResult;
   bool _isSearching = false;
   bool _showSearchBar = false;
+  bool _isExtractingTextForTts = false;
 
   @override
   void initState() {
@@ -49,65 +49,105 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     super.dispose();
   }
 
-  /// Extract text from the current page onwards for TTS
+  String _normalizeExtractedPdfText(String text) {
+    var normalized = text.replaceAll('\u00A0', ' ').replaceAll('\r', '\n');
+    normalized = normalized.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), ' ');
+    normalized = normalized.replaceAll(
+      RegExp(r'([.!?;:,])(?=[A-Za-z])'),
+      r'$1 ',
+    );
+    normalized = normalized.replaceAll(RegExp(r'(?<=[a-z])(?=[A-Z])'), ' ');
+    normalized = normalized.replaceAll(RegExp(r'[ \t]+'), ' ');
+    normalized = normalized.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return normalized.trim();
+  }
+
+  bool _looksCorruptedPdfText(String text) {
+    if (text.trim().isEmpty) return true;
+    final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (collapsed.isEmpty) return true;
+    final letters = RegExp(r'[A-Za-z]').allMatches(collapsed).length;
+    final spaces = RegExp(r'\s').allMatches(collapsed).length;
+    if (letters < 40) return false;
+    return spaces < (letters * 0.06);
+  }
+
+  String _extractPdfTextLocally(Uint8List bytes, int startPage) {
+    final document = PdfDocument(inputBytes: bytes);
+    try {
+      final extractor = PdfTextExtractor(document);
+      final pageCount = document.pages.count;
+      final startIndex = startPage.clamp(0, pageCount - 1);
+      final raw = extractor.extractText(
+        startPageIndex: startIndex,
+        endPageIndex: pageCount - 1,
+      );
+      return _normalizeExtractedPdfText(raw);
+    } finally {
+      document.dispose();
+    }
+  }
+
+  /// Extract text from the current page onwards for TTS.
   Future<void> _extractTextForTts() async {
     final activeSource = ref.read(activeSourceProvider);
     if (activeSource == null) {
-      print('TTS: No active source');
+      debugPrint('TTS: No active source');
       return;
     }
 
     final file = File(activeSource.filePath);
     if (!file.existsSync()) {
-      print('TTS: File does not exist: ${activeSource.filePath}');
+      debugPrint('TTS: File does not exist: ${activeSource.filePath}');
       return;
     }
 
-    final currentPage = ref.read(currentPageProvider);
-    final totalPages = ref.read(totalPagesProvider);
-
-    // Extract text from current page to the end (or next few pages)
-    // Limit to avoid extracting too much at once
-    final endPage = (currentPage + 10).clamp(1, totalPages);
-    print('TTS: Extracting text from page $currentPage to $endPage');
-
     try {
-      // Load the PDF document
       final bytes = await file.readAsBytes();
-      final document = PdfDocument(inputBytes: bytes);
-      final extractor = PdfTextExtractor(document);
+      final currentPage = ref.read(currentPageProvider);
+      String text = '';
 
-      // Extract text from the specified page range
-      final textBuffer = StringBuffer();
-      for (int i = currentPage - 1; i < endPage; i++) {
-        final pageText = extractor.extractText(startPageIndex: i, endPageIndex: i);
-        print('TTS: Page ${i + 1}: ${pageText.length} chars');
-        if (pageText.isNotEmpty) {
-          textBuffer.writeln(pageText);
-          textBuffer.writeln(); // Add paragraph break between pages
-        }
+      if (mounted) {
+        setState(() => _isExtractingTextForTts = true);
       }
 
-      document.dispose();
+      final service = ref.read(ttsServiceProvider);
+      try {
+        text = await service.extractPdfText(
+          bytes,
+          filename: p.basename(activeSource.filePath),
+        );
+      } catch (e) {
+        debugPrint(
+          'TTS: Backend extraction unavailable, using local extraction: $e',
+        );
+      }
 
-      final text = textBuffer.toString().trim();
-      print('TTS: Total extracted text: ${text.length} chars');
+      if (text.trim().isEmpty || _looksCorruptedPdfText(text)) {
+        text = _extractPdfTextLocally(bytes, currentPage - 1);
+      } else {
+        text = _normalizeExtractedPdfText(text);
+      }
+
+      debugPrint('TTS: Extracted text length: ${text.length} chars');
       if (text.isNotEmpty) {
         ref.read(ttsProvider.notifier).setContent(text);
-        print('TTS: Content set, ready to play');
+        debugPrint('TTS: Content set, ready to play');
       } else {
-        print('TTS: No text extracted');
+        debugPrint('TTS: No text extracted');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('No text found on this page. Try selecting text manually.'),
+              content: Text(
+                'No text found on this page. Try selecting text manually.',
+              ),
               duration: Duration(seconds: 2),
             ),
           );
         }
       }
     } catch (e) {
-      print('TTS: Exception during extraction: $e');
+      debugPrint('TTS: Exception during extraction: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -116,17 +156,21 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
           ),
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isExtractingTextForTts = false);
+      }
     }
   }
 
   /// Handle TTS play request
   Future<void> _handleTtsPlay() async {
-    print('TTS: _handleTtsPlay called');
+    debugPrint('TTS: _handleTtsPlay called');
     final ttsState = ref.read(ttsProvider);
 
     // If there's selected text, use that
     if (_selectedText != null && _selectedText!.isNotEmpty) {
-      print('TTS: Using selected text (${_selectedText!.length} chars)');
+      debugPrint('TTS: Using selected text (${_selectedText!.length} chars)');
       ref.read(ttsProvider.notifier).setContent(_selectedText!);
       ref.read(ttsProvider.notifier).play();
       return;
@@ -134,24 +178,28 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
     // If already has content and paused, resume
     if (ttsState.isPaused) {
-      print('TTS: Resuming paused playback');
+      debugPrint('TTS: Resuming paused playback');
       ref.read(ttsProvider.notifier).resume();
       return;
     }
 
     // Otherwise, extract text from PDF
-    print('TTS: Extracting text from PDF...');
+    debugPrint('TTS: Extracting text from PDF...');
     await _extractTextForTts();
 
     // Check if we got content
     final updatedState = ref.read(ttsProvider);
-    print('TTS: After extraction, paragraphs: ${updatedState.paragraphs.length}');
+    debugPrint(
+      'TTS: After extraction, paragraphs: ${updatedState.paragraphs.length}',
+    );
     if (updatedState.paragraphs.isEmpty) {
-      print('TTS: No paragraphs to play');
+      debugPrint('TTS: No paragraphs to play');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No text to read. Select some text or try a different page.'),
+            content: Text(
+              'No text to read. Select some text or try a different page.',
+            ),
             duration: Duration(seconds: 2),
           ),
         );
@@ -159,34 +207,8 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       return;
     }
 
-    print('TTS: Starting playback');
+    debugPrint('TTS: Starting playback');
     ref.read(ttsProvider.notifier).play();
-  }
-
-  /// Handle keyboard shortcuts for TTS
-  void _handleTtsKeyboard(KeyEvent event) {
-    if (event is! KeyDownEvent) return;
-
-    final ttsNotifier = ref.read(ttsProvider.notifier);
-    final ttsState = ref.read(ttsProvider);
-
-    // Space - Play/Pause
-    if (event.logicalKey == LogicalKeyboardKey.space) {
-      if (ttsState.isPlaying) {
-        ttsNotifier.pause();
-      } else if (ttsState.isPaused) {
-        ttsNotifier.resume();
-      } else {
-        _handleTtsPlay();
-      }
-      return;
-    }
-
-    // Escape - Stop
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      ttsNotifier.stop();
-      return;
-    }
   }
 
   Future<void> _addQuote() async {
@@ -197,11 +219,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
     if (source == null || text == null || text.isEmpty) return;
 
-    final added = await ref.read(sourcesProvider.notifier).addQuote(
-          sourceId: source.id,
-          text: text,
-          pageNumber: page,
-        );
+    final added = await ref
+        .read(sourcesProvider.notifier)
+        .addQuote(sourceId: source.id, text: text, pageNumber: page);
 
     if (added && mounted) {
       setState(() => _selectedText = null);
@@ -280,7 +300,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
     if (metadata == null) return;
 
-    final source = await ref.read(sourcesProvider.notifier).addSource(
+    final source = await ref
+        .read(sourcesProvider.notifier)
+        .addSource(
           title: metadata.title,
           author: metadata.author,
           year: metadata.year,
@@ -305,9 +327,11 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     if (paths.isEmpty) return;
 
     final pdfPaths = paths
-        .where((path) =>
-            FileSystemEntity.typeSync(path) == FileSystemEntityType.file &&
-            p.extension(path).toLowerCase() == '.pdf')
+        .where(
+          (path) =>
+              FileSystemEntity.typeSync(path) == FileSystemEntityType.file &&
+              p.extension(path).toLowerCase() == '.pdf',
+        )
         .toList();
 
     if (pdfPaths.isEmpty) {
@@ -460,10 +484,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
                     color: Theme.of(context).colorScheme.primary,
                     width: 2,
                   ),
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primaryContainer
-                      .withValues(alpha: 0.2),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.2),
                 )
               : null,
           child: content,
@@ -504,6 +527,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
     final serverStatus = ref.watch(ttsServerStatusProvider);
+    final backendStatus = ref.watch(backendStatusProvider);
+    final backendStatusText =
+        backendStatus.valueOrNull ?? 'Backend status unknown';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -519,7 +545,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // TTS Server Status indicator
-            _buildServerStatusIndicator(serverStatus),
+            _buildServerStatusIndicator(serverStatus, backendStatusText),
             const SizedBox(width: 2),
             // TTS Controls
             _buildTtsPlayButton(ttsState, ttsNotifier),
@@ -531,6 +557,44 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             ),
+            IconButton(
+              icon: const Icon(Icons.skip_previous, size: 16),
+              onPressed: ttsState.currentParagraphIndex > 0
+                  ? () => ttsNotifier.skipBackward()
+                  : null,
+              tooltip: 'Previous chunk',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+            IconButton(
+              icon: const Icon(Icons.skip_next, size: 16),
+              onPressed:
+                  ttsState.currentParagraphIndex < ttsState.totalParagraphs - 1
+                  ? () => ttsNotifier.skipForward()
+                  : null,
+              tooltip: 'Next chunk',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+            Container(
+              margin: const EdgeInsets.only(left: 2, right: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                ttsState.totalParagraphs == 0
+                    ? '0/0'
+                    : '${ttsState.currentParagraphIndex + 1}/${ttsState.totalParagraphs}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            _buildSpeedDropdown(ttsState, ttsNotifier),
+            const SizedBox(width: 4),
+            _buildVoiceDropdown(ttsState, ttsNotifier),
             const SizedBox(width: 4),
             // Zoom controls
             IconButton(
@@ -599,23 +663,28 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
                 onSelected: (value) {
                   ref.read(highlightModeProvider.notifier).state = value;
                 },
-              avatar: Icon(
-                highlightMode ? Icons.highlight : Icons.highlight_outlined,
-                size: 18,
+                avatar: Icon(
+                  highlightMode ? Icons.highlight : Icons.highlight_outlined,
+                  size: 18,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 4),
+            const SizedBox(width: 4),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildServerStatusIndicator(AsyncValue<bool> serverStatus) {
+  Widget _buildServerStatusIndicator(
+    AsyncValue<bool> serverStatus,
+    String backendStatusText,
+  ) {
     return serverStatus.when(
       data: (isConnected) => Tooltip(
-        message: isConnected ? 'TTS Server: Connected' : 'TTS Server: Disconnected',
+        message: isConnected
+            ? 'TTS Server: Connected ($backendStatusText)'
+            : 'TTS Server: Disconnected ($backendStatusText)',
         child: Container(
           width: 10,
           height: 10,
@@ -630,7 +699,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
         height: 10,
         child: CircularProgressIndicator(strokeWidth: 1),
       ),
-      error: (_, __) => Tooltip(
+      error: (_, _) => Tooltip(
         message: 'TTS Server: Error',
         child: Container(
           width: 10,
@@ -645,7 +714,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
   }
 
   Widget _buildTtsPlayButton(TtsState state, TtsNotifier notifier) {
-    if (state.isLoading) {
+    if (state.isLoading || _isExtractingTextForTts) {
       return Container(
         width: 40,
         height: 40,
@@ -669,7 +738,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
           _handleTtsPlay();
         }
       },
-      tooltip: state.isPlaying ? 'Pause reading' : 'Read aloud',
+      tooltip: _isExtractingTextForTts
+          ? 'Extracting text'
+          : (state.isPlaying ? 'Pause reading' : 'Read aloud'),
       visualDensity: VisualDensity.compact,
     );
   }
@@ -737,7 +808,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
             ),
           ),
           itemBuilder: (context) {
-            final femaleVoices = voices.where((v) => v.gender == 'female').toList();
+            final femaleVoices = voices
+                .where((v) => v.gender == 'female')
+                .toList();
             final maleVoices = voices.where((v) => v.gender == 'male').toList();
 
             return [
@@ -749,10 +822,12 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                 ),
               ),
-              ...femaleVoices.map((voice) => PopupMenuItem<String>(
-                    value: voice.id,
-                    child: Text('${voice.name} (${voice.grade})'),
-                  )),
+              ...femaleVoices.map(
+                (voice) => PopupMenuItem<String>(
+                  value: voice.id,
+                  child: Text('${voice.name} (${voice.grade})'),
+                ),
+              ),
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
                 enabled: false,
@@ -762,10 +837,12 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                 ),
               ),
-              ...maleVoices.map((voice) => PopupMenuItem<String>(
-                    value: voice.id,
-                    child: Text('${voice.name} (${voice.grade})'),
-                  )),
+              ...maleVoices.map(
+                (voice) => PopupMenuItem<String>(
+                  value: voice.id,
+                  child: Text('${voice.name} (${voice.grade})'),
+                ),
+              ),
             ];
           },
         );
@@ -778,12 +855,13 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 
   Widget _buildSearchBar() {
-    final hasResults = _searchResult != null && _searchResult!.totalInstanceCount > 0;
+    final hasResults =
+        _searchResult != null && _searchResult!.totalInstanceCount > 0;
     final currentIndex = _searchResult?.currentInstanceIndex ?? 0;
     final totalCount = _searchResult?.totalInstanceCount ?? 0;
 
@@ -880,9 +958,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
-        ),
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

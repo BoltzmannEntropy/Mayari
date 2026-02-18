@@ -65,7 +65,10 @@ info "Building DMG..."
 "$SCRIPT_DIR/build-dmg.sh"
 
 DMG_NAME="${APP_NAME}-${VERSION}.dmg"
-DMG_PATH="$BUILD_DIR/$DMG_NAME"
+DMG_PATH="$PROJECT_DIR/dist/$DMG_NAME"
+if [ ! -f "$DMG_PATH" ]; then
+    DMG_PATH="$BUILD_DIR/$DMG_NAME"
+fi
 
 if [ ! -f "$DMG_PATH" ]; then
     fail "DMG not found: $DMG_PATH"
@@ -77,7 +80,8 @@ ok "DMG ready: $DMG_PATH"
 # =============================================================================
 info ""
 info "Generating SHA256 checksum..."
-cd "$BUILD_DIR"
+DMG_DIR="$(dirname "$DMG_PATH")"
+cd "$DMG_DIR"
 shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
 SHA256=$(cat "$DMG_NAME.sha256")
 ok "Checksum: $SHA256"
@@ -119,7 +123,7 @@ if [ "$UPLOAD_TO_GITHUB" = true ]; then
 1. Download the DMG file
 2. Open it and drag Mayari to Applications
 3. On first launch, right-click and select Open (macOS Gatekeeper)
-4. Run \`mayarictl install\` to set up the TTS backend
+4. The bundled audio backend starts automatically inside the app
 
 ### System Requirements
 - macOS 12.0 or later (Apple Silicon recommended)
@@ -143,7 +147,7 @@ Generated with [Claude Code](https://claude.ai/code)
     ok "Uploaded: $DMG_NAME"
 
     info "Uploading checksum..."
-    gh release upload "$TAG" "$BUILD_DIR/$DMG_NAME.sha256" --clobber
+    gh release upload "$TAG" "$DMG_DIR/$DMG_NAME.sha256" --clobber
     ok "Uploaded: $DMG_NAME.sha256"
 
     echo ""
@@ -179,9 +183,7 @@ if [ "$SYNC_WEBSITE" = true ]; then
             info "No website changes to commit"
         else
             git add index.html
-            git commit -m "Update to v$VERSION
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+            git commit -m "Update to v$VERSION"
             git push
             ok "Website changes pushed to GitHub"
         fi
@@ -201,7 +203,7 @@ echo -e "${GREEN}=== Release Complete ===${NC}"
 echo ""
 echo "DMG:      $DMG_PATH"
 echo "Size:     $(du -h "$DMG_PATH" | cut -f1)"
-echo "Checksum: $BUILD_DIR/$DMG_NAME.sha256"
+echo "Checksum: $DMG_DIR/$DMG_NAME.sha256"
 echo ""
 
 if [ "$UPLOAD_TO_GITHUB" = false ] || [ "$SYNC_WEBSITE" = false ]; then

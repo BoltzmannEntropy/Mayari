@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import '../../providers/tts_provider.dart';
 import '../../services/storage_service.dart';
 import '../../services/log_service.dart';
+import '../../version.dart';
 import '../../screens/about_screen.dart';
 import '../../screens/privacy_policy_screen.dart';
 import '../../screens/terms_of_service_screen.dart';
@@ -116,7 +117,7 @@ class _GeneralSettingsTab extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text('About Mayari'),
-            subtitle: const Text('Version 1.0.0'),
+            subtitle: Text('Version $appVersion'),
             trailing: const Icon(Icons.chevron_right),
             contentPadding: EdgeInsets.zero,
             onTap: () {

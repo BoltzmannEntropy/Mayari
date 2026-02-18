@@ -16,6 +16,10 @@
 
 A macOS desktop application for **academic researchers**: **read your PDF books** in a clean two-pane interface, **listen with high-quality British TTS** while you work, **extract quotes** with a single keystroke (Cmd+D), and **export to Markdown** with properly formatted citations.
 
+License: Source code is licensed under Business Source License 1.1 (BSL-1.1), and binary distributions are licensed under the Mayari Binary Distribution License. See [LICENSE](LICENSE), [BINARY-LICENSE.txt](BINARY-LICENSE.txt), and the [website License page](https://boltzmannentropy.github.io/mayari-web/license.html).
+
+The codebase is cross-platform, but [we currently provide macOS binaries only.](https://boltzmannentropy.github.io/mayari-web/)
+
 ---
 
 ## Features at a Glance
@@ -579,6 +583,7 @@ S. Kashani, "Mayari: PDF Quote Extraction Tool for Academic Research," Johns Hop
 - Source code: Business Source License 1.1 (`LICENSE`)
 - Binary distribution: Binary Distribution License (`BINARY-LICENSE.txt`)
 - Overview: `LICENSE.md`
+- Website: https://boltzmannentropy.github.io/mayari-web/license.html
 
 The official DMG/executable binaries may not be used commercially or redistributed.
 

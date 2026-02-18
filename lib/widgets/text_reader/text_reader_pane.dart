@@ -4,7 +4,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/text_reader_provider.dart';
 import '../../providers/tts_provider.dart';
-import '../../services/tts_service.dart';
 import '../tts/speaker_cards.dart';
 
 class TextReaderPane extends ConsumerStatefulWidget {
@@ -36,7 +35,8 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    final isCmd = HardwareKeyboard.instance.isMetaPressed ||
+    final isCmd =
+        HardwareKeyboard.instance.isMetaPressed ||
         HardwareKeyboard.instance.isControlPressed;
     final ttsState = ref.read(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
@@ -125,6 +125,9 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
     final serverStatus = ref.watch(ttsServerStatusProvider);
+    final backendStatus = ref.watch(backendStatusProvider);
+    final backendStatusText =
+        backendStatus.valueOrNull ?? 'Backend status unknown';
     final textState = ref.watch(textReaderProvider);
 
     return Container(
@@ -141,7 +144,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // TTS Server Status indicator
-            _buildServerStatusIndicator(serverStatus),
+            _buildServerStatusIndicator(serverStatus, backendStatusText),
             const SizedBox(width: 2),
             // TTS Controls
             _buildTtsPlayButton(ttsState, ttsNotifier, textState),
@@ -167,7 +170,8 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
             // Skip forward
             IconButton(
               icon: const Icon(Icons.skip_next, size: 16),
-              onPressed: ttsState.currentParagraphIndex < ttsState.totalParagraphs - 1
+              onPressed:
+                  ttsState.currentParagraphIndex < ttsState.totalParagraphs - 1
                   ? () => ttsNotifier.skipForward()
                   : null,
               tooltip: 'Next paragraph',
@@ -194,10 +198,15 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
     );
   }
 
-  Widget _buildServerStatusIndicator(AsyncValue<bool> serverStatus) {
+  Widget _buildServerStatusIndicator(
+    AsyncValue<bool> serverStatus,
+    String backendStatusText,
+  ) {
     return serverStatus.when(
       data: (isConnected) => Tooltip(
-        message: isConnected ? 'TTS Server: Connected' : 'TTS Server: Disconnected',
+        message: isConnected
+            ? 'TTS Server: Connected ($backendStatusText)'
+            : 'TTS Server: Disconnected ($backendStatusText)',
         child: Container(
           width: 10,
           height: 10,
@@ -212,7 +221,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
         height: 10,
         child: CircularProgressIndicator(strokeWidth: 1),
       ),
-      error: (_, __) => Tooltip(
+      error: (_, _) => Tooltip(
         message: 'TTS Server: Error',
         child: Container(
           width: 10,
@@ -226,7 +235,11 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
     );
   }
 
-  Widget _buildTtsPlayButton(TtsState state, TtsNotifier notifier, TextReaderState textState) {
+  Widget _buildTtsPlayButton(
+    TtsState state,
+    TtsNotifier notifier,
+    TextReaderState textState,
+  ) {
     if (state.isLoading) {
       return Container(
         width: 40,
@@ -321,7 +334,9 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
             ),
           ),
           itemBuilder: (context) {
-            final femaleVoices = voices.where((v) => v.gender == 'female').toList();
+            final femaleVoices = voices
+                .where((v) => v.gender == 'female')
+                .toList();
             final maleVoices = voices.where((v) => v.gender == 'male').toList();
 
             return [
@@ -333,10 +348,12 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                 ),
               ),
-              ...femaleVoices.map((voice) => PopupMenuItem<String>(
-                    value: voice.id,
-                    child: Text('${voice.name} (${voice.grade})'),
-                  )),
+              ...femaleVoices.map(
+                (voice) => PopupMenuItem<String>(
+                  value: voice.id,
+                  child: Text('${voice.name} (${voice.grade})'),
+                ),
+              ),
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
                 enabled: false,
@@ -346,10 +363,12 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                 ),
               ),
-              ...maleVoices.map((voice) => PopupMenuItem<String>(
-                    value: voice.id,
-                    child: Text('${voice.name} (${voice.grade})'),
-                  )),
+              ...maleVoices.map(
+                (voice) => PopupMenuItem<String>(
+                  value: voice.id,
+                  child: Text('${voice.name} (${voice.grade})'),
+                ),
+              ),
             ];
           },
         );
@@ -362,7 +381,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 
@@ -493,9 +512,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
             fontWeight: FontWeight.w600,
           ),
           h3: theme.textTheme.titleLarge,
-          p: theme.textTheme.bodyLarge?.copyWith(
-            height: 1.6,
-          ),
+          p: theme.textTheme.bodyLarge?.copyWith(height: 1.6),
           blockquote: theme.textTheme.bodyLarge?.copyWith(
             fontStyle: FontStyle.italic,
             color: theme.colorScheme.onSurfaceVariant,
@@ -503,10 +520,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
           ),
           blockquoteDecoration: BoxDecoration(
             border: Border(
-              left: BorderSide(
-                color: theme.colorScheme.primary,
-                width: 4,
-              ),
+              left: BorderSide(color: theme.colorScheme.primary, width: 4),
             ),
           ),
           blockquotePadding: const EdgeInsets.only(left: 16),

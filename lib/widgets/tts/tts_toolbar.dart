@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/tts_provider.dart';
-import '../../services/tts_service.dart';
 
 class TtsToolbar extends ConsumerWidget {
   final VoidCallback? onSettingsPressed;
 
-  const TtsToolbar({
-    super.key,
-    this.onSettingsPressed,
-  });
+  const TtsToolbar({super.key, this.onSettingsPressed});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,7 +39,8 @@ class TtsToolbar extends ConsumerWidget {
         // Skip forward
         IconButton(
           icon: const Icon(Icons.skip_next, size: 20),
-          onPressed: ttsState.currentParagraphIndex < ttsState.totalParagraphs - 1
+          onPressed:
+              ttsState.currentParagraphIndex < ttsState.totalParagraphs - 1
               ? () => ttsNotifier.skipForward()
               : null,
           tooltip: 'Next paragraph',
@@ -180,7 +177,9 @@ class TtsToolbar extends ConsumerWidget {
             ),
           ),
           itemBuilder: (context) {
-            final femaleVoices = voices.where((v) => v.gender == 'female').toList();
+            final femaleVoices = voices
+                .where((v) => v.gender == 'female')
+                .toList();
             final maleVoices = voices.where((v) => v.gender == 'male').toList();
 
             return [
@@ -192,10 +191,12 @@ class TtsToolbar extends ConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
-              ...femaleVoices.map((voice) => PopupMenuItem<String>(
-                    value: voice.id,
-                    child: Text('${voice.name} (${voice.grade})'),
-                  )),
+              ...femaleVoices.map(
+                (voice) => PopupMenuItem<String>(
+                  value: voice.id,
+                  child: Text('${voice.name} (${voice.grade})'),
+                ),
+              ),
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
                 enabled: false,
@@ -205,10 +206,12 @@ class TtsToolbar extends ConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
-              ...maleVoices.map((voice) => PopupMenuItem<String>(
-                    value: voice.id,
-                    child: Text('${voice.name} (${voice.grade})'),
-                  )),
+              ...maleVoices.map(
+                (voice) => PopupMenuItem<String>(
+                  value: voice.id,
+                  child: Text('${voice.name} (${voice.grade})'),
+                ),
+              ),
             ];
           },
         );
@@ -221,7 +224,7 @@ class TtsToolbar extends ConsumerWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
-      error: (_, __) => Container(
+      error: (_, _) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: const Text('Error loading voices'),
       ),
