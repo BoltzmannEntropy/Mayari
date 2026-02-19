@@ -50,6 +50,20 @@ info()  { echo -e "${BLUE}$*${NC}"; }
 ok()    { echo -e "${GREEN}✓ $*${NC}"; }
 warn()  { echo -e "${YELLOW}$*${NC}"; }
 fail()  { echo -e "${RED}✗ $*${NC}"; exit 1; }
+upload_asset() {
+    local tag="$1"
+    local path="$2"
+
+    if [ ! -f "$path" ]; then
+        fail "Release asset not found: $path"
+    fi
+
+    local filename
+    filename="$(basename "$path")"
+    info "Uploading $filename..."
+    gh release upload "$tag" "$path" --clobber
+    ok "Uploaded: $filename"
+}
 
 # =============================================================================
 # Build DMG
@@ -81,10 +95,35 @@ ok "DMG ready: $DMG_PATH"
 info ""
 info "Generating SHA256 checksum..."
 DMG_DIR="$(dirname "$DMG_PATH")"
-cd "$DMG_DIR"
+DIST_DIR="$DMG_DIR"
+cd "$DIST_DIR"
 shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
 SHA256=$(cat "$DMG_NAME.sha256")
 ok "Checksum: $SHA256"
+
+info ""
+info "Preparing source and release-notes assets..."
+SOURCE_ZIP_NAME="${APP_NAME}-${VERSION}-source.zip"
+SOURCE_ZIP_PATH="$DIST_DIR/$SOURCE_ZIP_NAME"
+SOURCE_SHA_PATH="$SOURCE_ZIP_PATH.sha256"
+RELEASE_NOTES_NAME="${APP_NAME}-${VERSION}-RELEASE_NOTES.md"
+RELEASE_NOTES_PATH="$DIST_DIR/$RELEASE_NOTES_NAME"
+RELEASE_NOTES_SHA_PATH="$RELEASE_NOTES_PATH.sha256"
+RELEASE_NOTES_SRC="$PROJECT_DIR/RELEASE_NOTES.md"
+
+if [ ! -f "$RELEASE_NOTES_SRC" ]; then
+    fail "Missing required release notes file: $RELEASE_NOTES_SRC"
+fi
+
+cd "$PROJECT_DIR"
+git archive --format=zip --output "$SOURCE_ZIP_PATH" HEAD
+cd "$DIST_DIR"
+shasum -a 256 "$SOURCE_ZIP_NAME" > "$SOURCE_SHA_PATH"
+ok "Prepared source archive: $SOURCE_ZIP_NAME"
+
+cp "$RELEASE_NOTES_SRC" "$RELEASE_NOTES_PATH"
+shasum -a 256 "$RELEASE_NOTES_NAME" > "$RELEASE_NOTES_SHA_PATH"
+ok "Prepared release notes: $RELEASE_NOTES_NAME"
 
 # =============================================================================
 # Upload to GitHub Release (if --upload flag)
@@ -134,6 +173,14 @@ if [ "$UPLOAD_TO_GITHUB" = true ]; then
 $SHA256
 \`\`\`
 
+### Release Assets
+- ${APP_NAME}-${VERSION}.dmg
+- ${APP_NAME}-${VERSION}.dmg.sha256
+- ${APP_NAME}-${VERSION}-source.zip
+- ${APP_NAME}-${VERSION}-source.zip.sha256
+- ${APP_NAME}-${VERSION}-RELEASE_NOTES.md
+- ${APP_NAME}-${VERSION}-RELEASE_NOTES.md.sha256
+
 ---
 Generated with [Claude Code](https://claude.ai/code)
 " \
@@ -141,14 +188,13 @@ Generated with [Claude Code](https://claude.ai/code)
         ok "Release $TAG created as draft"
     fi
 
-    # Upload assets
-    info "Uploading DMG..."
-    gh release upload "$TAG" "$DMG_PATH" --clobber
-    ok "Uploaded: $DMG_NAME"
-
-    info "Uploading checksum..."
-    gh release upload "$TAG" "$DMG_DIR/$DMG_NAME.sha256" --clobber
-    ok "Uploaded: $DMG_NAME.sha256"
+    # Upload required release assets
+    upload_asset "$TAG" "$DMG_PATH"
+    upload_asset "$TAG" "$DIST_DIR/$DMG_NAME.sha256"
+    upload_asset "$TAG" "$SOURCE_ZIP_PATH"
+    upload_asset "$TAG" "$SOURCE_SHA_PATH"
+    upload_asset "$TAG" "$RELEASE_NOTES_PATH"
+    upload_asset "$TAG" "$RELEASE_NOTES_SHA_PATH"
 
     echo ""
     echo -e "${GREEN}=== Upload Complete ===${NC}"
@@ -204,6 +250,8 @@ echo ""
 echo "DMG:      $DMG_PATH"
 echo "Size:     $(du -h "$DMG_PATH" | cut -f1)"
 echo "Checksum: $DMG_DIR/$DMG_NAME.sha256"
+echo "Source:   $SOURCE_ZIP_PATH"
+echo "Notes:    $RELEASE_NOTES_PATH"
 echo ""
 
 if [ "$UPLOAD_TO_GITHUB" = false ] || [ "$SYNC_WEBSITE" = false ]; then
