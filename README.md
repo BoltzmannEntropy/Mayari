@@ -8,85 +8,99 @@
   </p>
 </div>
 
-Mayari is a desktop app for collecting, organizing, and exporting quotes from research PDFs. It combines a PDF reader, quote manager, native text-to-speech, and a markdown text reader in one workspace.
+Mayari is a macOS desktop app for collecting, organizing, and exporting quotes from research PDFs. It combines a PDF reader, quote manager, native text-to-speech, and a markdown text reader in one workspace.
 
-**100% Native** — No Python, no backend servers. TTS runs natively on Apple Silicon using the MLX framework via KokoroSwift.
+## Highlights
 
-License: source code is under BSL-1.1. Binary distributions use the Mayari Binary Distribution License. See `LICENSE`, `BINARY-LICENSE.txt`, and `LICENSE.md`.
+- **100% Native** — No Python, no servers, no external dependencies
+- **Native TTS** — KokoroSwift running on Apple MLX framework
+- **Lightweight** — 46MB app (model downloads on first use)
+- **Fast** — 3-5x faster than real-time audio generation
+- **Offline** — Works without internet after initial model download
+
+## Architecture
+
+```
+Flutter (Dart UI)
+       ↓
+MethodChannel
+       ↓
+KokoroTTSPlugin.swift
+       ↓
+KokoroSwift + Apple MLX
+       ↓
+Apple Silicon GPU
+```
+
+No HTTP servers. No API endpoints. Pure native communication via Flutter MethodChannels.
 
 ## Screenshot
 
 ![Mayari Screenshot](https://boltzmannentropy.github.io/mayari-web/images/mayari-screenshot.png)
 
-## Current Feature Set
-
-| Area | What it does now |
-| --- | --- |
-| PDF workspace | Three-pane layout: library sidebar, PDF/Text content pane, and quotes panel |
-| PDF library | Open a folder of PDFs, pick files, or drag-and-drop PDFs/folders |
-| Source metadata | Prompts for title, author, year, optional publisher when opening a new PDF |
-| Quote capture | Select text and save as quote with page number (`Cmd + D`) |
-| Highlight mode | Auto-captures selected text while enabled (`Cmd + H`) |
-| Quote management | Edit, delete, and reorder quotes per source |
-| Export | Copy all quotes to clipboard or export to `.md` |
-| Text reader mode | Toggle from PDF to Text mode; edit/view markdown and read it aloud |
-| TTS (native) | Kokoro TTS with British voices, speed control, play/pause/stop — no Python required |
-| Diagnostics | Collapsible system logs panel with clear/export actions |
-
 ## System Requirements
 
-- **macOS 15.0+** (Sequoia) — required for Apple MLX framework
-- **Apple Silicon** (M1/M2/M3/M4) — MLX runs on Apple GPU
+| Requirement | Details |
+|-------------|---------|
+| **macOS** | 15.0+ (Sequoia) |
+| **Processor** | Apple Silicon (M1/M2/M3/M4) |
+| **RAM** | 8GB minimum |
+| **Storage** | ~400MB (app + TTS model) |
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **PDF Workspace** | Three-pane layout: library sidebar, PDF/Text pane, quotes panel |
+| **Quote Capture** | Select text → `Cmd+D` to save with page number |
+| **Highlight Mode** | `Cmd+H` to auto-capture all selections |
+| **Text-to-Speech** | 8 British voices, speed control, play/pause/stop |
+| **Export** | Markdown export with formatted citations |
+| **Text Reader** | Edit/view markdown documents with TTS |
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
-| --- | --- |
-| `Cmd + D` | Add selected PDF text as quote |
+|----------|--------|
+| `Cmd + D` | Add selected text as quote |
 | `Cmd + H` | Toggle highlight mode |
-| `Space` | Play/Pause TTS in active content pane |
+| `Space` | Play/Pause TTS |
 | `Escape` | Stop TTS |
-| `Cmd + E` | Toggle edit/view mode in Text Reader |
+| `Cmd + E` | Toggle edit/view in Text Reader |
 
-## Quick Start (Development)
+## Installation
 
-### Prerequisites
+### From DMG (Recommended)
 
-- Flutter 3.x with macOS desktop enabled
-- Xcode 16+ (for macOS 15 SDK and Swift Package Manager)
-- macOS 15.0+ on Apple Silicon
+1. Download `Mayari-1.0.0.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
+2. Open DMG and drag Mayari to Applications
+3. Right-click → Open (first launch only, for Gatekeeper)
+4. TTS model (~340MB) downloads automatically on first use
 
-### Setup
+### From Source
 
 ```bash
+# Prerequisites: Flutter 3.x, Xcode 16+, macOS 15.0+
+
 git clone https://github.com/BoltzmannEntropy/Mayari.git
 cd Mayari
 flutter pub get
-```
-
-### Run the app
-
-```bash
 flutter run -d macos
 ```
 
-On first run, you'll be prompted to download the Kokoro TTS model (~340MB). This is a one-time download stored in the app's Application Support folder.
-
 ## Text-to-Speech
 
-Mayari uses **KokoroSwift**, a native Swift implementation of the Kokoro TTS model running on Apple's MLX framework. This provides:
+Mayari uses **KokoroSwift**, a native Swift port of the Kokoro TTS model:
 
-- **Offline operation** — no internet required after model download
-- **Fast generation** — 3-5x faster than real-time on Apple Silicon
-- **Low memory** — ~320MB RAM usage during synthesis
-- **High quality** — neural TTS with natural prosody
+- **Engine**: KokoroSwift with Misaki G2P
+- **Framework**: Apple MLX (Metal acceleration)
+- **Sample Rate**: 24kHz
+- **Performance**: ~320MB RAM, 1.7-2.4s for 7-8s audio
 
-### Available Voices
+### Voices
 
-All voices are British English:
-
-| Voice | Name | Gender | Quality |
-| --- | --- | --- | --- |
+| ID | Name | Gender | Grade |
+|----|------|--------|-------|
 | `bf_emma` | Emma | Female | B- (default) |
 | `bf_isabella` | Isabella | Female | C |
 | `bf_alice` | Alice | Female | D |
@@ -98,19 +112,18 @@ All voices are British English:
 
 ### Model Files
 
-The TTS model is downloaded on first use:
+Downloaded on first TTS use:
 
-- **kokoro-v1_0.safetensors** (~327MB) — the neural network weights
-- **voices.npz** (~14MB) — voice embeddings for all available voices
+| File | Size | Source |
+|------|------|--------|
+| `kokoro-v1_0.safetensors` | 327MB | HuggingFace mlx-community |
+| `voices.npz` | 14MB | KokoroTestApp |
 
-Files are stored in:
-```
-~/Library/Containers/com.mayari.mayariTemp/Data/Library/Application Support/Mayari/kokoro-model/
-```
+Location: `~/Library/Containers/com.mayari.mayariTemp/Data/Library/Application Support/Mayari/kokoro-model/`
 
 ## Export Format
 
-Quotes export as markdown grouped by source citation:
+Quotes export as markdown:
 
 ```markdown
 # Collected Quotes
@@ -122,48 +135,64 @@ Quotes export as markdown grouped by source citation:
 > — p. 42
 ```
 
-## Data and Storage
+## Project Structure
 
-- Quotes/sources and TTS preferences are saved in `mayari_data.json` in the app documents directory
-- Exported diagnostic logs are written to the app documents directory
-- TTS model files are stored in Application Support (see above)
+```
+lib/                 Flutter app (UI, state, services)
+├── providers/       Riverpod state management
+├── screens/         App screens
+├── services/        TTS service (MethodChannel client)
+└── widgets/         UI components
 
-## Project Layout
+macos/Runner/
+├── KokoroTTSPlugin.swift   Native TTS plugin
+├── MainFlutterWindow.swift Plugin registration
+└── project.pbxproj         SPM dependencies
 
-```text
-lib/         Flutter app (UI, state, services)
-macos/       macOS runner, native plugins, Swift Package Manager dependencies
-scripts/     Build/release helper scripts
+scripts/
+├── build-dmg.sh     DMG builder
+└── release.sh       Release automation
 ```
 
-### Native TTS Plugin
+## Native Plugin
 
-The TTS implementation is in `macos/Runner/KokoroTTSPlugin.swift`, which:
+`KokoroTTSPlugin.swift` implements:
 
-- Loads the Kokoro model via KokoroSwift
-- Handles voice embedding loading from NPZ files
-- Generates audio using MLX on the Apple GPU
-- Plays audio via AVAudioPlayer
+| Method | Description |
+|--------|-------------|
+| `loadModel` | Load safetensors + voice embeddings |
+| `speak` | Generate and play audio |
+| `pause/resume/stop` | Playback control |
+| `getVoices` | List available voices |
+| `getModelStatus` | Check load state |
 
-## Building a Release
+Communication via `MethodChannel("com.mayari.tts")`.
+
+## Building
 
 ```bash
-# Build release app
+# Development
+flutter run -d macos
+
+# Release build
 flutter build macos --release
 
-# Create DMG (if build-dmg.sh exists)
+# Create DMG
 ./scripts/build-dmg.sh
 ```
 
 ## Limitations
 
-- Quote capture depends on selectable PDF text (scanned PDFs need OCR outside the app)
-- Citation output is a simple source string, not full citation-style formatting
-- TTS requires macOS 15.0+ and Apple Silicon
+- Requires macOS 15.0+ and Apple Silicon
+- Quote capture needs selectable PDF text (no OCR)
+- British English voices only
 
 ## License
 
-- Source code: Business Source License 1.1 (`LICENSE`)
-- Binary distribution: Mayari Binary Distribution License (`BINARY-LICENSE.txt`)
-- Overview: `LICENSE.md`
-- Website license page: https://boltzmannentropy.github.io/mayari-web/license.html
+| Component | License |
+|-----------|---------|
+| Source Code | BSL-1.1 (`LICENSE`) |
+| Binary Distribution | Mayari Binary License (`BINARY-LICENSE.txt`) |
+| Overview | `LICENSE.md` |
+
+Website: https://boltzmannentropy.github.io/mayari-web/

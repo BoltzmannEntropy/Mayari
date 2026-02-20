@@ -38,3 +38,7 @@ backend/__pycache__/
 
 # Bundled Kokoro TTS models (~350MB)
 macos/Runner/Resources/kokoro/
+
+# Release artifacts (uploaded to GitHub Releases, not stored in git)
+dist/*.dmg
+dist/*.dmg.sha256

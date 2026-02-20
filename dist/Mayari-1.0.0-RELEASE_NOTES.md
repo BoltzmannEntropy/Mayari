@@ -4,7 +4,9 @@
 
 ## Overview
 
-Mayari v1.0.0 is the initial release of the academic PDF reader with quote extraction and text-to-speech capabilities. Named after the Philippine goddess of the moon, Mayari provides researchers with a focused reading and annotation environment.
+Mayari v1.0.0 is the initial release of the academic PDF reader with quote extraction and native text-to-speech. Named after the Philippine goddess of the moon, Mayari provides researchers with a focused reading and annotation environment.
+
+**100% Native** — No Python, no backend servers. TTS runs natively on Apple Silicon using the MLX framework via KokoroSwift.
 
 ## Features
 
@@ -26,11 +28,11 @@ Mayari v1.0.0 is the initial release of the academic PDF reader with quote extra
 - **Multi-source Support**: Track quotes from multiple documents
 - **Export Ready**: Properly formatted for academic writing
 
-### Text-to-Speech
-- **Kokoro TTS**: High-quality British voice synthesis
+### Text-to-Speech (Native)
+- **KokoroSwift TTS**: High-quality British voice synthesis using Apple MLX
 - **8 Voice Options**: Choose from multiple British accents
-- **Listen While Working**: Audio playback during research
-- **Document Reading**: Read entire pages or selected text
+- **Offline Operation**: No internet required after model download
+- **Fast Generation**: 3-5x faster than real-time on Apple Silicon
 
 ### Export
 - **Markdown Export**: One-click export with formatted citations
@@ -40,37 +42,26 @@ Mayari v1.0.0 is the initial release of the academic PDF reader with quote extra
 ## Technical Details
 
 - **Version**: 1.0.0 (build 1)
-- **Platform**: macOS (Apple Silicon and Intel)
+- **Platform**: macOS 15.0+ (Apple Silicon)
 - **Framework**: Flutter 3.x
-- **TTS Backend**: Kokoro (Python)
-- **Minimum macOS**: 12.0 (Monterey)
+- **TTS Engine**: KokoroSwift (Native Swift/MLX)
+- **Minimum macOS**: 15.0 (Sequoia)
 
 ## Installation
 
 1. Download `Mayari-1.0.0.dmg`
 2. Open the DMG and drag Mayari to Applications
-3. Copy the Backend folder to `~/Library/Application Support/Mayari/`
-4. On first launch, right-click the app and select "Open" (macOS Gatekeeper bypass)
-
-## First-time Setup
-
-```bash
-# Install TTS backend (optional, for text-to-speech)
-mayarictl install
-mayarictl tts start
-
-# Launch the app
-open /Applications/Mayari.app
-```
+3. On first launch, right-click the app and select "Open" (macOS Gatekeeper bypass)
+4. TTS model (~340MB) downloads automatically on first use
 
 ## System Requirements
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| macOS | 12.0 | 13.0+ |
-| RAM | 8GB | 16GB |
-| Storage | 500MB app + 350MB models | 2GB |
-| CPU | Any | Apple Silicon |
+| Component | Requirement |
+|-----------|-------------|
+| macOS | 15.0+ (Sequoia) |
+| CPU | Apple Silicon (M1/M2/M3/M4) |
+| RAM | 8GB minimum |
+| Storage | ~400MB (app + TTS model) |
 
 ## Checksums
 
@@ -79,8 +70,9 @@ SHA256 checksums should be verified after download.
 ## Known Issues
 
 - First launch requires Gatekeeper bypass (right-click > Open)
-- TTS models download on first use (~350MB)
+- TTS models download on first use (~340MB)
 - Some PDF formats may have text extraction limitations
+- Requires macOS 15.0+ and Apple Silicon for TTS
 
 ## License
 
