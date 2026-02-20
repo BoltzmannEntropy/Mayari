@@ -527,9 +527,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
     final serverStatus = ref.watch(ttsServerStatusProvider);
-    final backendStatus = ref.watch(backendStatusProvider);
-    final backendStatusText =
-        backendStatus.valueOrNull ?? 'Backend status unknown';
+    final ttsStatus = ref.watch(ttsStatusProvider);
+    final ttsStatusText =
+        ttsStatus.valueOrNull ?? 'Checking TTS...';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -545,7 +545,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // TTS Server Status indicator
-            _buildServerStatusIndicator(serverStatus, backendStatusText),
+            _buildServerStatusIndicator(serverStatus, ttsStatusText),
             const SizedBox(width: 2),
             // TTS Controls
             _buildTtsPlayButton(ttsState, ttsNotifier),
@@ -678,13 +678,13 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
   Widget _buildServerStatusIndicator(
     AsyncValue<bool> serverStatus,
-    String backendStatusText,
+    String ttsStatusText,
   ) {
     return serverStatus.when(
       data: (isConnected) => Tooltip(
         message: isConnected
-            ? 'TTS Server: Connected ($backendStatusText)'
-            : 'TTS Server: Disconnected ($backendStatusText)',
+            ? 'TTS: Ready ($ttsStatusText)'
+            : 'TTS: Not Ready ($ttsStatusText)',
         child: Container(
           width: 10,
           height: 10,
@@ -700,7 +700,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
         child: CircularProgressIndicator(strokeWidth: 1),
       ),
       error: (_, _) => Tooltip(
-        message: 'TTS Server: Error',
+        message: 'TTS: Error',
         child: Container(
           width: 10,
           height: 10,

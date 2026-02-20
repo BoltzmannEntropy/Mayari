@@ -105,7 +105,7 @@ final ttsServiceProvider = Provider<TtsService>((ref) {
 });
 
 /// Provider for TTS status messages (native Swift TTS).
-final backendStatusProvider = StreamProvider.autoDispose<String>((ref) async* {
+final ttsStatusProvider = StreamProvider.autoDispose<String>((ref) async* {
   final service = ref.watch(ttsServiceProvider);
 
   // Check native availability

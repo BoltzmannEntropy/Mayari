@@ -9,7 +9,7 @@ void main() {
       ProviderScope(
         overrides: [
           ttsServerStatusProvider.overrideWith((ref) => Stream.value(true)),
-          backendStatusProvider.overrideWith(
+          ttsStatusProvider.overrideWith(
             (ref) => Stream.value('Backend connected'),
           ),
         ],

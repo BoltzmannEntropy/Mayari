@@ -154,19 +154,20 @@ if [ "$UPLOAD_TO_GITHUB" = true ]; then
 
 ### Features
 - PDF document viewing with smooth navigation
-- Text-to-speech using Kokoro TTS engine
-- Multiple voice selection with speaker cards
+- Native text-to-speech using KokoroSwift (no Python required)
+- 8 British English voices
 - Dual-provider licensing (BSL + Binary License)
 
 ### Installation
 1. Download the DMG file
 2. Open it and drag Mayari to Applications
 3. On first launch, right-click and select Open (macOS Gatekeeper)
-4. The bundled audio backend starts automatically inside the app
+4. TTS model (~340MB) downloads automatically on first use
 
 ### System Requirements
-- macOS 12.0 or later (Apple Silicon recommended)
-- ~500MB disk space for TTS models
+- macOS 15.0+ (Sequoia) - required for MLX framework
+- Apple Silicon (M1/M2/M3/M4)
+- ~400MB disk space (app + TTS model)
 
 ### Checksums
 \`\`\`
