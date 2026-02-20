@@ -1,37 +1,29 @@
-# Mayari v1.0.1 Release Notes
+# Mayari v1.0.2 Release Notes
 
 **Release Date:** February 20, 2026
 
 ## Highlights
 
-- Added Mimika-style in-document PDF read-aloud highlighting with live word tracking.
-- Unified text processing to fix glued-word sentence parsing in read-aloud previews.
-- Replaced modal audiobook creation with a persistent **Jobs queue** in the left sidebar.
-- Added retry/cancel/remove controls for audiobook jobs.
-- Added safety checks to mark empty/inaudible audiobook output as failed (with explicit error details).
-- Updated app and website screenshots to the latest reader UI.
+- Added explicit `Play`, `Pause`, and `Stop` controls on each audiobook card.
+- Kept queue-based audiobook generation with jobs in the left sidebar (`Jobs` tab).
+- Added model file location visibility in Settings (`Text-to-Speech` > `Model location`).
+- Removed hardcoded external-volume PDF defaults that triggered removable-volume access issues.
+- Added readable-file checks so inaccessible/stale PDF paths are filtered out safely.
+- Improved extraction error messages for denied file access.
 
-## Audiobook Workflow Changes
+## Audiobook Workflow
 
-- `Create Audiobook` now enqueues background jobs immediately instead of opening a popup.
-- Jobs are visible in the left deck under `Jobs`.
-- Queue processing is sequential and persisted locally across app restarts.
-- Failed jobs now show underlying errors (for example model-load race or empty output).
+- `Create Audiobook` enqueues background jobs immediately.
+- Jobs are processed sequentially and persisted across restarts.
+- Failed jobs expose detailed error messages and can be retried/cancelled.
 
-## Native TTS and Stability
+## Stability
 
-- Improved native model-load handling to wait when load is already in progress.
-- Added stricter output validation for generated audiobook files.
+- Startup no longer depends on hardcoded `/Volumes/...` paths.
+- Saved sources that are no longer readable are auto-pruned.
 
 ## Distribution
 
-- **Version:** `1.0.1+2`
-- **Primary Artifact:** `Mayari-1.0.1.dmg`
+- **Version:** `1.0.2+3`
+- **Primary Artifact:** `Mayari-1.0.2.dmg`
 - **Platform:** macOS 15.0+ (Apple Silicon)
-
-## Screenshot
-
-Latest UI preview:
-
-https://boltzmannentropy.github.io/mayari-web/images/mayari-reader-2026-02-20-web.png
-

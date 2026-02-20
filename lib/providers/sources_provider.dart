@@ -8,6 +8,18 @@ import '../services/storage_service.dart';
 
 final storageServiceProvider = Provider((ref) => StorageService());
 
+bool _isReadableFile(String filePath) {
+  final file = File(filePath);
+  if (!file.existsSync()) return false;
+  try {
+    final handle = file.openSync(mode: FileMode.read);
+    handle.closeSync();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Callback to set active source after default PDF is loaded
 typedef SetActiveSourceCallback = void Function(String sourceId);
 
@@ -47,10 +59,15 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
 
   Future<void> _loadSources() async {
     final loaded = await _storage.loadSources();
-    state = loaded;
+    final valid = loaded.where((s) => _isReadableFile(s.filePath)).toList();
+    state = valid;
+
+    if (valid.length != loaded.length) {
+      await _save();
+    }
 
     // If no sources exist, try to load the bundled default PDF
-    if (loaded.isEmpty) {
+    if (valid.isEmpty) {
       await _loadBundledDefaultPdf();
     }
   }
@@ -103,21 +120,15 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
         candidates.add(candidate);
         dir = dir.parent;
       }
-
-      // Hardcoded development path as fallback
-      candidates.add(
-        '/Volumes/SSD4tb/Dropbox/DSS/artifacts/code/MayariPRJ/MayariCODE/pdf/$pdfName',
-      );
     }
 
     debugPrint(
       'Searching for bundled PDF in ${candidates.length} locations...',
     );
     for (final path in candidates) {
-      final file = File(path);
-      if (file.existsSync()) {
+      if (_isReadableFile(path)) {
         debugPrint('Found bundled PDF: $path');
-        return file.path;
+        return path;
       }
     }
 

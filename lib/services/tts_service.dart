@@ -191,6 +191,12 @@ class TtsService {
     return modelDir;
   }
 
+  /// Public model directory path for diagnostics/UI display.
+  Future<String> getModelDirectoryPath() async {
+    final modelDir = await _getModelDirectory();
+    return modelDir.path;
+  }
+
   /// Check if model is downloaded
   Future<bool> isModelDownloaded() async {
     final modelDir = await _getModelDirectory();

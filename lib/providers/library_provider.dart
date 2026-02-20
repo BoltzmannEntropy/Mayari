@@ -4,15 +4,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 const _defaultPdfFolderEnv = 'MAYARI_DEFAULT_PDF_LIBRARY';
-const _preferredDefaultPdfFolder =
-    '/Volumes/SSD4tb/Dropbox/DSS/artifacts/code/MayariPRJ/MayariCODE/pdf';
+
+bool _isReadablePdfFile(String filePath) {
+  final file = File(filePath);
+  if (!file.existsSync()) return false;
+  try {
+    final handle = file.openSync(mode: FileMode.read);
+    handle.closeSync();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 bool _directoryHasPdf(String path) {
   final dir = Directory(path);
   if (!dir.existsSync()) return false;
   try {
     return dir.listSync().any(
-      (f) => f is File && p.extension(f.path).toLowerCase() == '.pdf',
+      (f) =>
+          f is File &&
+          p.extension(f.path).toLowerCase() == '.pdf' &&
+          _isReadablePdfFile(f.path),
     );
   } catch (_) {
     return false;
@@ -24,7 +37,6 @@ String? _findBundledPdfFolder() {
   if (kIsWeb) return null;
 
   final candidates = <String>[];
-  candidates.add(_preferredDefaultPdfFolder);
 
   if (Platform.isMacOS) {
     // macOS app bundle: Contents/Resources/pdf/
@@ -38,9 +50,6 @@ String? _findBundledPdfFolder() {
       candidates.add(p.join(dir.path, 'pdf'));
       dir = dir.parent;
     }
-
-    // Hardcoded development path as fallback
-    candidates.add(_preferredDefaultPdfFolder);
   }
 
   for (final path in candidates) {
@@ -54,11 +63,6 @@ String? _findBundledPdfFolder() {
 }
 
 final libraryFolderProvider = StateProvider<String?>((ref) {
-  // Preferred development default folder
-  if (_directoryHasPdf(_preferredDefaultPdfFolder)) {
-    return _preferredDefaultPdfFolder;
-  }
-
   // First check environment variable
   final configuredFolder = Platform.environment[_defaultPdfFolderEnv];
   if (configuredFolder != null &&

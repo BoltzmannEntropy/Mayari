@@ -14,6 +14,7 @@ Mayari is an Apple-platform app for collecting, organizing, and exporting quotes
 
 - **100% Native** — No Python, no servers, no external dependencies
 - **Native TTS** — KokoroSwift running on Apple MLX framework
+- **Queue-Based Audiobooks** — Generate in background with persisted Jobs queue
 - **Lightweight** — 46MB app (model downloads on first use)
 - **Fast** — 3-5x faster than real-time audio generation
 - **Offline** — Works without internet after initial model download
@@ -56,6 +57,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 | **Quote Capture** | Select text → `Cmd+D` to save with page number |
 | **Highlight Mode** | `Cmd+H` to auto-capture all selections |
 | **Text-to-Speech** | 8 British voices, speed control, play/pause/stop |
+| **Audiobook Jobs Queue** | Background queue with progress, retry/cancel, and saved outputs |
 | **Export** | Markdown export with formatted citations |
 | **Text Reader** | Edit/view markdown documents with TTS |
 
@@ -73,7 +75,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 
 ### From DMG (Recommended)
 
-1. Download `Mayari-1.0.1.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
+1. Download `Mayari-1.0.2.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
 2. Open DMG and drag Mayari to Applications
 3. Right-click → Open (first launch only, for Gatekeeper)
 4. TTS model (~340MB) downloads automatically on first use
@@ -120,7 +122,16 @@ Downloaded on first TTS use:
 | `kokoro-v1_0.safetensors` | 327MB | HuggingFace mlx-community |
 | `voices.npz` | 14MB | KokoroTestApp |
 
-Location: `~/Library/Containers/com.mayari.mayariTemp/Data/Library/Application Support/Mayari/kokoro-model/`
+Location: `~/Library/Application Support/Mayari/kokoro-model/`
+
+The exact active paths are shown in-app under `Settings → Text-to-Speech → Model location`.
+
+## Audiobook Jobs Queue
+
+- `Create Audiobook` adds a new background job immediately.
+- Open the left deck `Jobs` tab to monitor queue progress and status.
+- Jobs support retry/cancel/remove, and completed jobs appear in the `Audio` tab.
+- Audiobook cards now have explicit `Play`, `Pause`, and `Stop` buttons.
 
 ## Export Format
 

@@ -15,9 +15,7 @@ class AudiobooksPanel extends ConsumerWidget {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: theme.dividerColor),
-        ),
+        border: Border(top: BorderSide(color: theme.dividerColor)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,7 +63,8 @@ class AudiobooksPanel extends ConsumerWidget {
                           Icon(
                             Icons.audiotrack_outlined,
                             size: 32,
-                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.5),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -78,7 +77,8 @@ class AudiobooksPanel extends ConsumerWidget {
                           Text(
                             'Create one from a PDF',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                              color: theme.colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.7),
                               fontSize: 11,
                             ),
                           ),
@@ -93,9 +93,15 @@ class AudiobooksPanel extends ConsumerWidget {
                       final book = audiobooks[index];
                       return _AudiobookCard(
                         book: book,
-                        isPlaying: playbackState.playingId == book.id && playbackState.isPlaying,
-                        isPaused: playbackState.playingId == book.id && playbackState.isPaused,
-                        position: playbackState.playingId == book.id ? playbackState.position : Duration.zero,
+                        isPlaying:
+                            playbackState.playingId == book.id &&
+                            playbackState.isPlaying,
+                        isPaused:
+                            playbackState.playingId == book.id &&
+                            playbackState.isPaused,
+                        position: playbackState.playingId == book.id
+                            ? playbackState.position
+                            : Duration.zero,
                       );
                     },
                   ),
@@ -146,14 +152,18 @@ class _AudiobookCard extends ConsumerWidget {
                 Icon(
                   Icons.audiotrack,
                   size: 14,
-                  color: isActive ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                  color: isActive
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     book.title,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: isActive
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -165,7 +175,10 @@ class _AudiobookCard extends ConsumerWidget {
                   tooltip: 'Delete',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
                 ),
               ],
             ),
@@ -200,29 +213,44 @@ class _AudiobookCard extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
             child: Row(
               children: [
-                // Play/Pause
+                // Play / Resume
                 IconButton(
-                  icon: Icon(
-                    isPlaying ? Icons.pause : Icons.play_arrow,
-                    size: 18,
-                  ),
-                  onPressed: () => _togglePlayPause(ref),
-                  tooltip: isPlaying ? 'Pause' : 'Play',
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  onPressed: isPlaying ? null : () => _playOrResume(ref),
+                  tooltip: isPaused ? 'Resume' : 'Play',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                 ),
 
-                // Stop (only if active)
-                if (isActive)
-                  IconButton(
-                    icon: const Icon(Icons.stop, size: 18),
-                    onPressed: () => ref.read(audiobookPlaybackProvider.notifier).stop(),
-                    tooltip: 'Stop',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                // Pause
+                IconButton(
+                  icon: const Icon(Icons.pause, size: 18),
+                  onPressed: isPlaying ? () => _pause(ref) : null,
+                  tooltip: 'Pause',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
                   ),
+                ),
+
+                // Stop
+                IconButton(
+                  icon: const Icon(Icons.stop, size: 18),
+                  onPressed: isActive ? () => _stop(ref) : null,
+                  tooltip: 'Stop',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                ),
 
                 const Spacer(),
 
@@ -233,7 +261,10 @@ class _AudiobookCard extends ConsumerWidget {
                   tooltip: 'Show in Finder',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                 ),
               ],
             ),
@@ -243,15 +274,21 @@ class _AudiobookCard extends ConsumerWidget {
     );
   }
 
-  void _togglePlayPause(WidgetRef ref) {
+  void _playOrResume(WidgetRef ref) {
     final notifier = ref.read(audiobookPlaybackProvider.notifier);
-    if (isPlaying) {
-      notifier.pause();
-    } else if (isPaused) {
+    if (isPaused) {
       notifier.resume();
     } else {
       notifier.play(book);
     }
+  }
+
+  void _pause(WidgetRef ref) {
+    ref.read(audiobookPlaybackProvider.notifier).pause();
+  }
+
+  void _stop(WidgetRef ref) {
+    ref.read(audiobookPlaybackProvider.notifier).stop();
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
@@ -259,7 +296,9 @@ class _AudiobookCard extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Audiobook'),
-        content: Text('Delete "${book.title}"?\n\nThis will also delete the audio file.'),
+        content: Text(
+          'Delete "${book.title}"?\n\nThis will also delete the audio file.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

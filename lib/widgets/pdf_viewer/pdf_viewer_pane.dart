@@ -1041,6 +1041,21 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       }
       return;
     }
+    try {
+      final handle = file.openSync(mode: FileMode.read);
+      handle.closeSync();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cannot access this PDF. Use Open Folder and grant permission.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() => _isExtractingTextForTts = true);
 
@@ -1101,9 +1116,16 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     } catch (e) {
       setState(() => _isExtractingTextForTts = false);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error extracting text: $e')));
+        final message = e.toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message.contains('PathAccessException')
+                  ? 'PDF access denied. Re-open the folder and allow access.'
+                  : 'Error extracting text: $e',
+            ),
+          ),
+        );
       }
     }
   }

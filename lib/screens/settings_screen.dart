@@ -93,7 +93,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     color: isSelected
                         ? theme.colorScheme.onPrimaryContainer
                         : theme.colorScheme.onSurface,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
                 ),
               ],
@@ -162,7 +164,9 @@ class _GeneralSettingsPane extends ConsumerWidget {
                       title: const Text('Privacy Policy'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const PrivacyPolicyScreen(),
+                        ),
                       ),
                     ),
                     const Divider(height: 1),
@@ -171,7 +175,9 @@ class _GeneralSettingsPane extends ConsumerWidget {
                       title: const Text('Terms of Service'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const TermsOfServiceScreen(),
+                        ),
                       ),
                     ),
                     const Divider(height: 1),
@@ -180,7 +186,9 @@ class _GeneralSettingsPane extends ConsumerWidget {
                       title: const Text('Licenses'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const LicenseScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const LicenseScreen(),
+                        ),
                       ),
                     ),
                   ],
@@ -229,9 +237,9 @@ class _GeneralSettingsPane extends ConsumerWidget {
                   title: const Text('Mayari Pro'),
                   subtitle: const Text('7-day trial with license activation'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ProScreen()),
-                  ),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const ProScreen())),
                 ),
               ),
               const SizedBox(height: 24),
@@ -258,9 +266,9 @@ class _GeneralSettingsPane extends ConsumerWidget {
   Widget _buildSectionHeader(BuildContext context, String title) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        fontWeight: FontWeight.bold,
-      ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 
@@ -292,12 +300,14 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isPreviewPlaying = false;
+  String? _modelDirectoryPath;
   StreamSubscription<PlayerState>? _previewSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadModelPaths();
   }
 
   @override
@@ -345,6 +355,12 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
         ),
       );
     }
+  }
+
+  Future<void> _loadModelPaths() async {
+    final modelDir = await ref.read(ttsServiceProvider).getModelDirectoryPath();
+    if (!mounted) return;
+    setState(() => _modelDirectoryPath = modelDir);
   }
 
   Future<void> _previewVoice() async {
@@ -442,7 +458,10 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
                         items: speedOptions.map((speed) {
                           String label = speedDisplayName(speed);
                           if (speed == 1.0) label += ' (Normal)';
-                          return DropdownMenuItem(value: speed, child: Text(label));
+                          return DropdownMenuItem(
+                            value: speed,
+                            child: Text(label),
+                          );
                         }).toList(),
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
@@ -467,14 +486,19 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
                   children: [
                     SwitchListTile(
                       title: const Text('Auto-advance pages'),
-                      subtitle: const Text('Automatically turn pages while reading'),
+                      subtitle: const Text(
+                        'Automatically turn pages while reading',
+                      ),
                       value: _autoAdvancePages,
-                      onChanged: (value) => setState(() => _autoAdvancePages = value),
+                      onChanged: (value) =>
+                          setState(() => _autoAdvancePages = value),
                     ),
                     const Divider(height: 1),
                     SwitchListTile(
                       title: const Text('Highlight current paragraph'),
-                      subtitle: const Text('Show visual highlight on text being read'),
+                      subtitle: const Text(
+                        'Show visual highlight on text being read',
+                      ),
                       value: _highlightCurrentParagraph,
                       onChanged: (value) =>
                           setState(() => _highlightCurrentParagraph = value),
@@ -511,9 +535,9 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
   Widget _buildSectionHeader(BuildContext context, String title) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        fontWeight: FontWeight.bold,
-      ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 
@@ -529,7 +553,10 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
     );
   }
 
-  Widget _buildModelStatusCard(BuildContext context, ModelDownloadStatus status) {
+  Widget _buildModelStatusCard(
+    BuildContext context,
+    ModelDownloadStatus status,
+  ) {
     final theme = Theme.of(context);
 
     IconData icon;
@@ -566,13 +593,16 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
       icon = Icons.cloud_download_outlined;
       iconColor = theme.colorScheme.primary;
       title = 'TTS Model Required';
-      subtitle = 'Download the Kokoro TTS model (~340 MB) to enable text-to-speech';
+      subtitle =
+          'Download the Kokoro TTS model (~340 MB) to enable text-to-speech';
       action = FilledButton.icon(
         onPressed: () => showModelDownloadDialog(context),
         icon: const Icon(Icons.download),
         label: const Text('Download Model'),
       );
     }
+
+    final modelDir = _modelDirectoryPath;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -587,33 +617,51 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
               : theme.dividerColor,
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: iconColor, size: 40),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 40),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              if (action != null) ...[const SizedBox(width: 16), action],
+            ],
           ),
-          if (action != null) ...[
-            const SizedBox(width: 16),
-            action,
+          if (modelDir != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Model location',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            SelectableText(
+              '$modelDir/kokoro-v1_0.safetensors\n$modelDir/voices.npz',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: 'monospace',
+              ),
+            ),
           ],
         ],
       ),
