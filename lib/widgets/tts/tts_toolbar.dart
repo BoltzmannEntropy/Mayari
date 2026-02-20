@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/tts_provider.dart';
+import '../../providers/model_download_provider.dart';
 
 class TtsToolbar extends ConsumerWidget {
   final VoidCallback? onSettingsPressed;
@@ -11,6 +12,12 @@ class TtsToolbar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
+    final modelStatus = ref.watch(modelDownloadProvider);
+
+    // Show disabled state if model not ready
+    if (!modelStatus.isReady) {
+      return _buildDisabledToolbar(context, modelStatus);
+    }
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -52,11 +59,6 @@ class TtsToolbar extends ConsumerWidget {
         // Speed dropdown
         _buildSpeedDropdown(context, ttsState, ttsNotifier),
 
-        const SizedBox(width: 8),
-
-        // Voice dropdown
-        _buildVoiceDropdown(context, ref, ttsState, ttsNotifier),
-
         // Settings button (optional)
         if (onSettingsPressed != null) ...[
           const SizedBox(width: 4),
@@ -65,6 +67,54 @@ class TtsToolbar extends ConsumerWidget {
             onPressed: onSettingsPressed,
             tooltip: 'TTS Settings',
             visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDisabledToolbar(BuildContext context, ModelDownloadStatus status) {
+    final theme = Theme.of(context);
+    final message = status.isDownloading
+        ? 'Downloading TTS model...'
+        : 'TTS model required';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          status.isDownloading ? Icons.downloading : Icons.cloud_download_outlined,
+          size: 20,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          message,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (status.isDownloading) ...[
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              value: status.progress > 0 ? status.progress : null,
+              strokeWidth: 2,
+            ),
+          ),
+        ],
+        if (onSettingsPressed != null) ...[
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: onSettingsPressed,
+            icon: const Icon(Icons.settings, size: 16),
+            label: const Text('Setup'),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
           ),
         ],
       ],
@@ -140,96 +190,6 @@ class TtsToolbar extends ConsumerWidget {
     );
   }
 
-  Widget _buildVoiceDropdown(
-    BuildContext context,
-    WidgetRef ref,
-    TtsState state,
-    TtsNotifier notifier,
-  ) {
-    final voicesAsync = ref.watch(ttsVoicesProvider);
-
-    return voicesAsync.when(
-      data: (voices) {
-        final currentVoice = voices.firstWhere(
-          (v) => v.id == state.currentVoice,
-          orElse: () => voices.first,
-        );
-
-        return PopupMenuButton<String>(
-          initialValue: state.currentVoice,
-          onSelected: (voiceId) => notifier.setVoice(voiceId),
-          tooltip: 'Select voice',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  currentVoice.displayName,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const Icon(Icons.arrow_drop_down, size: 18),
-              ],
-            ),
-          ),
-          itemBuilder: (context) {
-            final femaleVoices = voices
-                .where((v) => v.gender == 'female')
-                .toList();
-            final maleVoices = voices.where((v) => v.gender == 'male').toList();
-
-            return [
-              const PopupMenuItem<String>(
-                enabled: false,
-                height: 30,
-                child: Text(
-                  'Female',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-              ...femaleVoices.map(
-                (voice) => PopupMenuItem<String>(
-                  value: voice.id,
-                  child: Text('${voice.name} (${voice.grade})'),
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                enabled: false,
-                height: 30,
-                child: Text(
-                  'Male',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-              ...maleVoices.map(
-                (voice) => PopupMenuItem<String>(
-                  value: voice.id,
-                  child: Text('${voice.name} (${voice.grade})'),
-                ),
-              ),
-            ];
-          },
-        );
-      },
-      loading: () => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: const SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-      error: (_, _) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: const Text('Error loading voices'),
-      ),
-    );
-  }
 }
 
 /// Compact version of the TTS toolbar for smaller spaces
@@ -240,6 +200,21 @@ class TtsToolbarCompact extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
+    final modelStatus = ref.watch(modelDownloadProvider);
+
+    // Show disabled state if model not ready
+    if (!modelStatus.isReady) {
+      return Tooltip(
+        message: modelStatus.isDownloading
+            ? 'Downloading TTS model...'
+            : 'TTS model required - go to Settings > TTS',
+        child: Icon(
+          modelStatus.isDownloading ? Icons.downloading : Icons.cloud_download_outlined,
+          size: 20,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
 
     return Row(
       mainAxisSize: MainAxisSize.min,

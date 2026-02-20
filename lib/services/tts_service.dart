@@ -54,12 +54,7 @@ const List<TtsVoice> defaultVoices = [
 ];
 
 /// Model download status
-enum ModelDownloadStatus {
-  notDownloaded,
-  downloading,
-  downloaded,
-  error,
-}
+enum ModelDownloadStatus { notDownloaded, downloading, downloaded, error }
 
 /// Service for managing Kokoro TTS using native Swift implementation
 class TtsService {
@@ -80,6 +75,8 @@ class TtsService {
 
   ModelDownloadStatus _downloadStatus = ModelDownloadStatus.notDownloaded;
   ModelDownloadStatus get downloadStatus => _downloadStatus;
+  String? _lastAudiobookError;
+  String? get lastAudiobookError => _lastAudiobookError;
 
   /// Stream of player state changes
   Stream<PlayerState> get playerStateStream => _audioPlayer.playerStateStream;
@@ -119,35 +116,64 @@ class TtsService {
 
   /// Check if server/native is healthy
   Future<bool> isServerHealthy({bool attemptAutoStart = true}) async {
-    final nativeAvailable = await isNativeAvailable();
-    if (!nativeAvailable) {
-      debugPrint('TTS: Native TTS not available (requires macOS 15.0+)');
-      return false;
-    }
-
-    final status = await getModelStatus();
-    if (status['loaded'] == true) {
-      return true;
-    }
-
-    // Check if model is downloaded
-    final modelDir = await _getModelDirectory();
-    final modelFile = File(path.join(modelDir.path, 'kokoro-v1_0.safetensors'));
-
-    if (!modelFile.existsSync()) {
-      debugPrint('TTS: Model not downloaded yet');
-      _downloadStatus = ModelDownloadStatus.notDownloaded;
-      return false;
-    }
-
-    // Try to load the model
     try {
-      final loaded = await _channel.invokeMethod<bool>('loadModel');
-      return loaded ?? false;
+      final nativeAvailable = await isNativeAvailable();
+      if (!nativeAvailable) {
+        debugPrint('TTS: Native TTS not available (requires macOS 15.0+)');
+        return false;
+      }
+
+      final status = await getModelStatus();
+      if (status['loaded'] == true) {
+        return true;
+      }
+
+      // Check if model is downloaded
+      final downloaded = await isModelDownloaded();
+      if (!downloaded) {
+        debugPrint('TTS: Model not downloaded yet');
+        _downloadStatus = ModelDownloadStatus.notDownloaded;
+        return false;
+      }
+
+      // Try to load the model only if attemptAutoStart is true
+      if (attemptAutoStart) {
+        try {
+          final loaded = await _channel.invokeMethod<bool>('loadModel');
+          return loaded ?? false;
+        } catch (e) {
+          final message = e.toString();
+          debugPrint('TTS: Failed to load model: $message');
+          // If model loading is already in progress from another request,
+          // wait for readiness instead of reporting a hard failure.
+          if (message.contains('LOADING') ||
+              message.contains('already loading')) {
+            return _waitForModelLoaded();
+          }
+          return false;
+        }
+      }
+
+      return false;
     } catch (e) {
-      debugPrint('TTS: Failed to load model: $e');
+      debugPrint('TTS: Health check failed: $e');
       return false;
     }
+  }
+
+  Future<bool> _waitForModelLoaded({
+    Duration timeout = const Duration(seconds: 12),
+    Duration pollInterval = const Duration(milliseconds: 300),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final status = await getModelStatus();
+      if (status['loaded'] == true) {
+        return true;
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+    return false;
   }
 
   /// Get the model directory path
@@ -308,8 +334,9 @@ class TtsService {
 
     try {
       // Keep text bounded
-      final truncatedText =
-          text.length > 20000 ? text.substring(0, 20000) : text;
+      final truncatedText = text.length > 20000
+          ? text.substring(0, 20000)
+          : text;
 
       debugPrint('TTS: Sending synthesis request...');
 
@@ -391,13 +418,19 @@ class TtsService {
   Future<String> extractPdfText(
     Uint8List bytes, {
     String filename = 'document.pdf',
+    int startPage = 1,
   }) async {
-    // For now, throw an error indicating this needs to be implemented
-    // or use a Flutter PDF plugin
-    throw UnimplementedError(
-      'PDF text extraction not yet implemented for native TTS mode. '
-      'Consider using a Flutter PDF plugin like syncfusion_flutter_pdf.',
-    );
+    try {
+      final result = await _channel.invokeMethod<String>('extractPdfText', {
+        'bytes': bytes,
+        'filename': filename,
+        'startPage': startPage,
+      });
+      return result ?? '';
+    } catch (e) {
+      debugPrint('TTS: Native PDF extraction failed: $e');
+      return '';
+    }
   }
 
   /// Test TTS with 3 different voices, saves WAV files to /tmp/
@@ -417,9 +450,114 @@ class TtsService {
     return [];
   }
 
+  // Audiobook generation progress stream
+  final StreamController<AudiobookProgress> _audiobookProgressController =
+      StreamController<AudiobookProgress>.broadcast();
+  Stream<AudiobookProgress> get audiobookProgress =>
+      _audiobookProgressController.stream;
+
+  /// Generate an audiobook from text chunks
+  /// Returns the output file path and metadata on success
+  Future<AudiobookResult?> generateAudiobook({
+    required List<String> chunks,
+    required String outputPath,
+    required String title,
+    String voice = 'bf_emma',
+    double speed = 1.0,
+  }) async {
+    _lastAudiobookError = null;
+    if (!await isServerHealthy(attemptAutoStart: true)) {
+      _lastAudiobookError = 'Native TTS not ready for audiobook generation';
+      debugPrint('TTS Error: $_lastAudiobookError');
+      return null;
+    }
+
+    // Set up progress listener
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'audiobookProgress') {
+        final args = call.arguments as Map<dynamic, dynamic>;
+        _audiobookProgressController.add(
+          AudiobookProgress(
+            currentChunk: args['current'] as int,
+            totalChunks: args['total'] as int,
+            status: args['status'] as String,
+          ),
+        );
+      }
+    });
+
+    try {
+      debugPrint(
+        'TTS: Starting audiobook generation with ${chunks.length} chunks',
+      );
+
+      final result = await _channel.invokeMethod<Map>('generateAudiobook', {
+        'chunks': chunks,
+        'outputPath': outputPath,
+        'title': title,
+        'voice': voice,
+        'speed': speed,
+      });
+
+      if (result != null) {
+        return AudiobookResult(
+          path: result['path'] as String,
+          duration: result['duration'] as double,
+          chunks: result['chunks'] as int,
+          format: result['format'] as String,
+        );
+      }
+      _lastAudiobookError = 'Native plugin returned empty response';
+    } catch (e) {
+      _lastAudiobookError = e.toString();
+      debugPrint(
+        'TTS Error: Audiobook generation failed: $_lastAudiobookError',
+      );
+    }
+
+    return null;
+  }
+
   /// Dispose resources
   Future<void> dispose() async {
     await _downloadProgressController.close();
+    await _audiobookProgressController.close();
     await _audioPlayer.dispose();
+  }
+}
+
+/// Progress update during audiobook generation
+class AudiobookProgress {
+  final int currentChunk;
+  final int totalChunks;
+  final String status;
+
+  AudiobookProgress({
+    required this.currentChunk,
+    required this.totalChunks,
+    required this.status,
+  });
+
+  double get progress => totalChunks > 0 ? currentChunk / totalChunks : 0;
+}
+
+/// Result of audiobook generation
+class AudiobookResult {
+  final String path;
+  final double duration;
+  final int chunks;
+  final String format;
+
+  AudiobookResult({
+    required this.path,
+    required this.duration,
+    required this.chunks,
+    required this.format,
+  });
+
+  String get durationFormatted {
+    final minutes = (duration / 60).floor();
+    final seconds = (duration % 60).floor();
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }

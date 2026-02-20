@@ -8,7 +8,7 @@
   </p>
 </div>
 
-Mayari is a macOS desktop app for collecting, organizing, and exporting quotes from research PDFs. It combines a PDF reader, quote manager, native text-to-speech, and a markdown text reader in one workspace.
+Mayari is an Apple-platform app for collecting, organizing, and exporting quotes from research PDFs. It combines a PDF reader, quote manager, native text-to-speech, and a markdown text reader in one workspace.
 
 ## Highlights
 
@@ -36,14 +36,15 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 
 ## Screenshot
 
-![Mayari Screenshot](https://boltzmannentropy.github.io/mayari-web/images/mayari-screenshot.png)
+![Mayari Reader UI (2026-02-20)](assets/mayari-reader-2026-02-20.png)
 
 ## System Requirements
 
 | Requirement | Details |
 |-------------|---------|
 | **macOS** | 15.0+ (Sequoia) |
-| **Processor** | Apple Silicon (M1/M2/M3/M4) |
+| **iOS/iPadOS** | 18.0+ for App Store build baseline |
+| **Processor** | Apple Silicon (M1/M2/M3/M4) for macOS build host |
 | **RAM** | 8GB minimum |
 | **Storage** | ~400MB (app + TTS model) |
 
@@ -72,7 +73,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 
 ### From DMG (Recommended)
 
-1. Download `Mayari-1.0.0.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
+1. Download `Mayari-1.0.1.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
 2. Open DMG and drag Mayari to Applications
 3. Right-click → Open (first launch only, for Gatekeeper)
 4. TTS model (~340MB) downloads automatically on first use
@@ -151,7 +152,14 @@ macos/Runner/
 
 scripts/
 ├── build-dmg.sh     DMG builder
-└── release.sh       Release automation
+├── release.sh       macOS release automation
+├── check-ios-dist.sh iOS/iPad preflight validation
+└── release-ios.sh   iOS/iPad IPA build + optional upload
+
+ios/
+├── Runner/                iOS app target
+├── ExportOptions.plist    IPA export settings
+└── Runner/PrivacyInfo.xcprivacy
 ```
 
 ## Native Plugin
@@ -179,6 +187,24 @@ flutter build macos --release
 
 # Create DMG
 ./scripts/build-dmg.sh
+```
+
+### iOS / iPad Build & Distribution Prep
+
+```bash
+# Validate iOS/iPad release prerequisites
+bash ./scripts/check-ios-dist.sh
+
+# Build IPA (TestFlight/App Store Connect ready artifact)
+bash ./scripts/release-ios.sh
+```
+
+Optional upload with `asc` CLI:
+
+```bash
+export ASC_APP_ID="<app_store_connect_app_id>"
+export ASC_TESTFLIGHT_GROUP="<testflight_group>"
+bash ./scripts/release-ios.sh --upload --dist testflight
 ```
 
 ## Limitations

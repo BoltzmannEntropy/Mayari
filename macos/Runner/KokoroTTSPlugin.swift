@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import FlutterMacOS
+import PDFKit
 import KokoroSwift
 import MLX
 import MLXUtilsLibrary
@@ -107,6 +108,27 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
 
         case "testVoices":
             testVoices(result: result)
+
+        case "generateAudiobook":
+            guard let args = call.arguments as? [String: Any],
+                  let chunks = args["chunks"] as? [String],
+                  let outputPath = args["outputPath"] as? String else {
+                result(FlutterError(code: "INVALID_ARGS", message: "Missing chunks or outputPath", details: nil))
+                return
+            }
+            let voice = args["voice"] as? String ?? "bf_emma"
+            let speed = args["speed"] as? Double ?? 1.0
+            let title = args["title"] as? String ?? "Audiobook"
+            generateAudiobook(chunks: chunks, voice: voice, speed: speed, title: title, outputPath: outputPath, result: result)
+
+        case "extractPdfText":
+            guard let args = call.arguments as? [String: Any],
+                  let bytes = args["bytes"] as? FlutterStandardTypedData else {
+                result(FlutterError(code: "INVALID_ARGS", message: "Missing PDF bytes", details: nil))
+                return
+            }
+            let startPage = args["startPage"] as? Int ?? 1
+            extractPdfText(pdfBytes: bytes.data, startPage: startPage, result: result)
 
         default:
             result(FlutterMethodNotImplemented)
@@ -321,6 +343,167 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
                 result(outputFiles)
             }
         }
+    }
+
+    /// Generate a complete audiobook from text chunks
+    private func generateAudiobook(chunks: [String], voice: String, speed: Double, title: String, outputPath: String, result: @escaping FlutterResult) {
+        guard isModelLoaded, let engine = ttsEngine else {
+            result(FlutterError(code: "NOT_LOADED", message: "Model not loaded", details: nil))
+            return
+        }
+
+        guard let voiceEmbedding = voiceEmbeddings[voice] ?? voiceEmbeddings["bf_emma"] else {
+            result(FlutterError(code: "VOICE_ERROR", message: "Voice not found", details: nil))
+            return
+        }
+
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            var allSamples: [Float] = []
+            let totalChunks = chunks.count
+            let silenceSamples = [Float](repeating: 0, count: KokoroTTS.Constants.samplingRate / 2) // 0.5s silence between chunks
+
+            for (index, chunk) in chunks.enumerated() {
+                let trimmedChunk = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedChunk.isEmpty else { continue }
+
+                // Report progress
+                DispatchQueue.main.async {
+                    self.methodChannel?.invokeMethod("audiobookProgress", arguments: [
+                        "current": index + 1,
+                        "total": totalChunks,
+                        "status": "Processing chunk \(index + 1) of \(totalChunks)"
+                    ])
+                }
+
+                do {
+                    print("[KokoroTTS] Generating chunk \(index + 1)/\(totalChunks): \(trimmedChunk.prefix(50))...")
+
+                    let (audioSamples, _) = try engine.generateAudio(
+                        voice: voiceEmbedding,
+                        language: .enGB,
+                        text: trimmedChunk,
+                        speed: Float(speed)
+                    )
+
+                    allSamples.append(contentsOf: audioSamples)
+
+                    // Add silence between chunks (except after last)
+                    if index < totalChunks - 1 {
+                        allSamples.append(contentsOf: silenceSamples)
+                    }
+
+                } catch {
+                    print("[KokoroTTS] Error on chunk \(index): \(error)")
+                    // Continue with next chunk
+                }
+            }
+
+            if allSamples.isEmpty {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "GENERATE_ERROR", message: "No audio samples generated", details: nil))
+                }
+                return
+            }
+
+            // Convert to WAV
+            let wavData = self.convertToWav(samples: allSamples, sampleRate: KokoroTTS.Constants.samplingRate)
+
+            // Save to file
+            do {
+                let outputURL = URL(fileURLWithPath: outputPath)
+                try wavData.write(to: outputURL)
+
+                let durationSeconds = Double(allSamples.count) / Double(KokoroTTS.Constants.samplingRate)
+
+                DispatchQueue.main.async {
+                    print("[KokoroTTS] Audiobook saved: \(outputPath) (\(String(format: "%.1f", durationSeconds))s)")
+                    result([
+                        "path": outputPath,
+                        "duration": durationSeconds,
+                        "chunks": totalChunks,
+                        "format": "wav"
+                    ])
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "SAVE_ERROR", message: error.localizedDescription, details: nil))
+                }
+            }
+        }
+    }
+
+    private func extractPdfText(pdfBytes: Data, startPage: Int, result: @escaping FlutterResult) {
+        audioQueue.async {
+            guard let document = PDFDocument(data: pdfBytes) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "PDF_ERROR", message: "Failed to read PDF bytes", details: nil))
+                }
+                return
+            }
+
+            let pageCount = document.pageCount
+            if pageCount <= 0 {
+                DispatchQueue.main.async { result("") }
+                return
+            }
+
+            let clampedStart = max(0, min(pageCount - 1, startPage - 1))
+            var pages: [String] = []
+            for pageIndex in clampedStart..<pageCount {
+                guard let page = document.page(at: pageIndex),
+                      let pageText = page.string else {
+                    continue
+                }
+                let normalizedPage = self.normalizeExtractedPdfText(pageText)
+                if !normalizedPage.isEmpty {
+                    pages.append(normalizedPage)
+                }
+            }
+
+            let combined = self.normalizeExtractedPdfText(pages.joined(separator: "\n\n"))
+            DispatchQueue.main.async {
+                result(combined)
+            }
+        }
+    }
+
+    private func normalizeExtractedPdfText(_ text: String) -> String {
+        if text.isEmpty {
+            return text
+        }
+
+        var normalized = text
+            .replacingOccurrences(of: "\u{00a0}", with: " ")
+            .replacingOccurrences(of: "\r", with: "\n")
+        normalized = normalized.replacingOccurrences(
+            of: "(?<!\\n)\\n(?!\\n)",
+            with: " ",
+            options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(
+            of: "([.!?;:,])(?=[A-Za-z])",
+            with: "$1 ",
+            options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(
+            of: "(?<=[a-z])(?=[A-Z])",
+            with: " ",
+            options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(
+            of: "[ \\t]+",
+            with: " ",
+            options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(
+            of: "\\n{3,}",
+            with: "\n\n",
+            options: .regularExpression
+        )
+
+        return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func convertToWav(samples: [Float], sampleRate: Int) -> Data {

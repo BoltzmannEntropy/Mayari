@@ -86,4 +86,17 @@ class StorageService {
     data['tts'] = settings.toJson();
     await _saveData(data);
   }
+
+  /// Load generic JSON data by key
+  Future<dynamic> loadJson(String key) async {
+    final data = await _loadData();
+    return data[key];
+  }
+
+  /// Save generic JSON data by key
+  Future<void> saveJson(String key, dynamic value) async {
+    final data = await _loadData();
+    data[key] = value;
+    await _saveData(data);
+  }
 }

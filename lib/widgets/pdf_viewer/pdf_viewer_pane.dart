@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,14 +7,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:path/path.dart' as p;
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart' as pdf;
 import '../../providers/library_provider.dart';
 import '../../providers/pdf_provider.dart';
 import '../../providers/sources_provider.dart';
 import '../../providers/tts_provider.dart';
-import '../dialogs/source_metadata_dialog.dart';
-import '../dialogs/settings_dialog.dart';
+import '../../providers/model_download_provider.dart';
+import '../../providers/audiobook_provider.dart';
+import '../dialogs/model_download_dialog.dart';
 import '../tts/speaker_cards.dart';
+import '../tts/tts_reading_indicator.dart';
+
+class _PdfWordAnchor {
+  const _PdfWordAnchor({required this.normalizedWord, required this.line});
+
+  final String normalizedWord;
+  final PdfTextLine line;
+}
 
 class PdfViewerPane extends ConsumerStatefulWidget {
   const PdfViewerPane({super.key});
@@ -23,6 +33,19 @@ class PdfViewerPane extends ConsumerStatefulWidget {
 }
 
 class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
+  static const Color _activeReadAloudHighlightColor = Color.fromARGB(
+    220,
+    68,
+    84,
+    170,
+  );
+  static const Color _trailingReadAloudHighlightColor = Color.fromARGB(
+    150,
+    255,
+    213,
+    79,
+  );
+
   final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
   PdfViewerController? _pdfController;
   String? _selectedText;
@@ -35,6 +58,17 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
   bool _showSearchBar = false;
   bool _isExtractingTextForTts = false;
 
+  final List<Annotation> _activeReadAloudAnnotations = <Annotation>[];
+  final List<_PdfWordAnchor> _pdfWordAnchors = <_PdfWordAnchor>[];
+  final List<int> _globalWordAnchorIndices = <int>[];
+  final List<String> _globalWords = <String>[];
+  final List<int> _paragraphWordStart = <int>[];
+  List<String> _indexedParagraphs = const <String>[];
+  int _activeReadAloudAnchorIndex = -1;
+  int _pdfWordAnchorBuildId = 0;
+  int _highlightRequestId = 0;
+  String? _wordAnchorSourcePath;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +77,8 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
   @override
   void dispose() {
+    _highlightRequestId++;
+    _clearReadAloudAnnotations();
     _pdfController?.dispose();
     _searchController.dispose();
     _searchResult?.clear();
@@ -52,10 +88,12 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
   String _normalizeExtractedPdfText(String text) {
     var normalized = text.replaceAll('\u00A0', ' ').replaceAll('\r', '\n');
     normalized = normalized.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), ' ');
-    normalized = normalized.replaceAll(
+    normalized = normalized.replaceAllMapped(
       RegExp(r'([.!?;:,])(?=[A-Za-z])'),
-      r'$1 ',
+      (m) => '${m.group(1)} ',
     );
+    // Defensive cleanup for legacy bad replacement artifacts like "$1".
+    normalized = normalized.replaceAll(RegExp(r'\$[0-9]+'), ' ');
     normalized = normalized.replaceAll(RegExp(r'(?<=[a-z])(?=[A-Z])'), ' ');
     normalized = normalized.replaceAll(RegExp(r'[ \t]+'), ' ');
     normalized = normalized.replaceAll(RegExp(r'\n{3,}'), '\n\n');
@@ -72,10 +110,267 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     return spaces < (letters * 0.06);
   }
 
-  String _extractPdfTextLocally(Uint8List bytes, int startPage) {
-    final document = PdfDocument(inputBytes: bytes);
+  bool _isPdfPath(String path) => p.extension(path).toLowerCase() == '.pdf';
+
+  String _normalizeWord(String word) {
+    return word.toLowerCase().replaceAll(
+      RegExp(r'^[^a-z0-9]+|[^a-z0-9]+$'),
+      '',
+    );
+  }
+
+  List<String> _extractTrackableWords(String text) {
+    final words = <String>[];
+    for (final token in text.split(RegExp(r'\s+'))) {
+      final clean = _normalizeWord(token);
+      if (clean.length >= 2) {
+        words.add(clean);
+      }
+    }
+    return words;
+  }
+
+  void _setWordAnchorSourcePath(String? sourcePath) {
+    if (_wordAnchorSourcePath == sourcePath) return;
+    _highlightRequestId++;
+    _wordAnchorSourcePath = sourcePath;
+    _pdfWordAnchors.clear();
+    _globalWordAnchorIndices
+      ..clear()
+      ..addAll(List<int>.filled(_globalWords.length, -1));
+    _activeReadAloudAnchorIndex = -1;
+    _pdfWordAnchorBuildId++;
+    _clearReadAloudAnnotations();
+  }
+
+  void _rebuildGlobalWordIndex(List<String> paragraphs) {
+    if (listEquals(_indexedParagraphs, paragraphs)) return;
+    _indexedParagraphs = List<String>.from(paragraphs);
+
+    _globalWords.clear();
+    _paragraphWordStart.clear();
+    for (final paragraph in paragraphs) {
+      _paragraphWordStart.add(_globalWords.length);
+      _globalWords.addAll(_extractTrackableWords(paragraph));
+    }
+
+    _globalWordAnchorIndices
+      ..clear()
+      ..addAll(List<int>.filled(_globalWords.length, -1));
+    _buildGlobalWordAnchorMap();
+  }
+
+  Future<void> _preparePdfWordAnchorsIfNeeded(String sourcePath) async {
+    if (!_isPdfPath(sourcePath)) return;
+    if (_pdfWordAnchors.isNotEmpty) return;
+
+    final file = File(sourcePath);
+    if (!await file.exists()) return;
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) return;
+
+    final buildId = ++_pdfWordAnchorBuildId;
+    final anchors = <_PdfWordAnchor>[];
+    pdf.PdfDocument? document;
     try {
-      final extractor = PdfTextExtractor(document);
+      document = pdf.PdfDocument(inputBytes: bytes);
+      final extractor = pdf.PdfTextExtractor(document);
+      final textLines = extractor.extractTextLines();
+
+      for (final line in textLines) {
+        final pageNumber = line.pageIndex + 1;
+        for (final word in line.wordCollection) {
+          final normalized = _normalizeWord(word.text);
+          if (normalized.length < 2) continue;
+          anchors.add(
+            _PdfWordAnchor(
+              normalizedWord: normalized,
+              line: PdfTextLine(word.bounds, word.text, pageNumber),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('TTS: Failed to build PDF word anchors: $e');
+      return;
+    } finally {
+      document?.dispose();
+    }
+
+    if (!mounted ||
+        buildId != _pdfWordAnchorBuildId ||
+        _wordAnchorSourcePath != sourcePath) {
+      return;
+    }
+
+    _pdfWordAnchors
+      ..clear()
+      ..addAll(anchors);
+    _buildGlobalWordAnchorMap();
+  }
+
+  void _buildGlobalWordAnchorMap() {
+    if (_globalWordAnchorIndices.length != _globalWords.length) {
+      _globalWordAnchorIndices
+        ..clear()
+        ..addAll(List<int>.filled(_globalWords.length, -1));
+    } else {
+      for (var i = 0; i < _globalWordAnchorIndices.length; i++) {
+        _globalWordAnchorIndices[i] = -1;
+      }
+    }
+
+    if (_globalWords.isEmpty || _pdfWordAnchors.isEmpty) return;
+
+    int anchorCursor = 0;
+    for (int i = 0; i < _globalWords.length; i++) {
+      final target = _globalWords[i];
+      while (anchorCursor < _pdfWordAnchors.length &&
+          _pdfWordAnchors[anchorCursor].normalizedWord != target) {
+        anchorCursor++;
+      }
+      if (anchorCursor >= _pdfWordAnchors.length) break;
+      _globalWordAnchorIndices[i] = anchorCursor;
+      anchorCursor++;
+    }
+  }
+
+  void _clearReadAloudAnnotations() {
+    final controller = _pdfController;
+    if (controller == null) return;
+
+    final stale = <Annotation>[..._activeReadAloudAnnotations];
+    try {
+      final existing = controller.getAnnotations();
+      for (final annotation in existing) {
+        if ((annotation.subject ?? '') == 'mayari.readaloud') {
+          stale.add(annotation);
+        }
+      }
+    } catch (_) {
+      // Viewer may not be ready for annotation enumeration.
+    }
+
+    for (final annotation in stale.toSet()) {
+      try {
+        controller.removeAnnotation(annotation);
+      } catch (_) {
+        // Ignore stale references during rapid updates.
+      }
+    }
+
+    _activeReadAloudAnnotations.clear();
+    _activeReadAloudAnchorIndex = -1;
+  }
+
+  bool _tryHighlightWithPdfWordAnchor(int globalIndex) {
+    final controller = _pdfController;
+    if (controller == null) return false;
+    if (globalIndex < 0 || globalIndex >= _globalWordAnchorIndices.length) {
+      return false;
+    }
+
+    final indices = <int>[];
+    for (int offset = 2; offset >= 0; offset--) {
+      final idx = globalIndex - offset;
+      if (idx < 0 || idx >= _globalWordAnchorIndices.length) continue;
+      final anchorIndex = _globalWordAnchorIndices[idx];
+      if (anchorIndex < 0 || anchorIndex >= _pdfWordAnchors.length) continue;
+      indices.add(anchorIndex);
+    }
+    if (indices.isEmpty) return false;
+
+    final currentAnchorIndex = indices.last;
+    if (_activeReadAloudAnchorIndex == currentAnchorIndex &&
+        _activeReadAloudAnnotations.length == indices.length) {
+      return true;
+    }
+
+    _clearReadAloudAnnotations();
+    for (int i = 0; i < indices.length; i++) {
+      final anchor = _pdfWordAnchors[indices[i]];
+      final isCurrentWord = i == indices.length - 1;
+      final annotation =
+          HighlightAnnotation(textBoundsCollection: [anchor.line])
+            ..subject = 'mayari.readaloud'
+            ..author = 'mayari'
+            ..color = isCurrentWord
+                ? _activeReadAloudHighlightColor
+                : _trailingReadAloudHighlightColor
+            ..opacity = isCurrentWord ? 0.82 : 0.55;
+      controller.addAnnotation(annotation);
+      _activeReadAloudAnnotations.add(annotation);
+    }
+    _activeReadAloudAnchorIndex = currentAnchorIndex;
+
+    final currentAnchor = _pdfWordAnchors[currentAnchorIndex];
+    if (controller.pageNumber != currentAnchor.line.pageNumber) {
+      controller.jumpToPage(currentAnchor.line.pageNumber);
+    }
+
+    return true;
+  }
+
+  Future<void> _highlightCurrentTtsWord({
+    required String sourcePath,
+    required int globalWordIndex,
+    required int requestId,
+  }) async {
+    if (requestId != _highlightRequestId) return;
+    await _preparePdfWordAnchorsIfNeeded(sourcePath);
+    if (requestId != _highlightRequestId) return;
+    _tryHighlightWithPdfWordAnchor(globalWordIndex);
+  }
+
+  void _handleTtsStateChanged(TtsState next) {
+    final activeSource = ref.read(activeSourceProvider);
+    final sourcePath = activeSource?.filePath;
+    if (sourcePath == null || !_isPdfPath(sourcePath)) {
+      _setWordAnchorSourcePath(null);
+      return;
+    }
+
+    _setWordAnchorSourcePath(sourcePath);
+    _rebuildGlobalWordIndex(next.paragraphs);
+
+    if (next.isStopped || !next.isPlaying || next.currentWordIndex < 0) {
+      if (next.isStopped) {
+        _highlightRequestId++;
+        _clearReadAloudAnnotations();
+      }
+      return;
+    }
+
+    if (next.currentParagraphIndex < 0 ||
+        next.currentParagraphIndex >= _paragraphWordStart.length) {
+      return;
+    }
+
+    final paragraphWords = _extractTrackableWords(
+      next.paragraphs[next.currentParagraphIndex],
+    );
+    if (next.currentWordIndex >= paragraphWords.length) {
+      return;
+    }
+
+    final globalIndex =
+        _paragraphWordStart[next.currentParagraphIndex] + next.currentWordIndex;
+    if (globalIndex < 0 || globalIndex >= _globalWords.length) return;
+
+    final requestId = ++_highlightRequestId;
+    unawaited(
+      _highlightCurrentTtsWord(
+        sourcePath: sourcePath,
+        globalWordIndex: globalIndex,
+        requestId: requestId,
+      ),
+    );
+  }
+
+  String _extractPdfTextLocally(Uint8List bytes, int startPage) {
+    final document = pdf.PdfDocument(inputBytes: bytes);
+    try {
+      final extractor = pdf.PdfTextExtractor(document);
       final pageCount = document.pages.count;
       final startIndex = startPage.clamp(0, pageCount - 1);
       final raw = extractor.extractText(
@@ -116,6 +411,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
         text = await service.extractPdfText(
           bytes,
           filename: p.basename(activeSource.filePath),
+          startPage: currentPage,
         );
       } catch (e) {
         debugPrint(
@@ -211,33 +507,6 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     ref.read(ttsProvider.notifier).play();
   }
 
-  Future<void> _addQuote() async {
-    if (!mounted) return;
-    final source = ref.read(activeSourceProvider);
-    final text = _selectedText;
-    final page = ref.read(currentPageProvider);
-
-    if (source == null || text == null || text.isEmpty) return;
-
-    final added = await ref
-        .read(sourcesProvider.notifier)
-        .addQuote(sourceId: source.id, text: text, pageNumber: page);
-
-    if (added && mounted) {
-      setState(() => _selectedText = null);
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          added ? 'Quote added from page $page' : 'Quote already saved',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   void _toggleSearch() {
     setState(() {
       _showSearchBar = !_showSearchBar;
@@ -283,32 +552,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
   }
 
   Future<void> _openPdfFromPath(String filePath) async {
-    final sources = ref.read(sourcesProvider);
-    final existing = sources.where((s) => s.filePath == filePath).firstOrNull;
-    if (existing != null) {
-      ref.read(activeSourceIdProvider.notifier).state = existing.id;
-      return;
-    }
-
-    final metadata = await showDialog<SourceMetadataResult>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => SourceMetadataDialog(
-        initialTitle: p.basenameWithoutExtension(filePath),
-      ),
-    );
-
-    if (metadata == null) return;
-
     final source = await ref
         .read(sourcesProvider.notifier)
-        .addSource(
-          title: metadata.title,
-          author: metadata.author,
-          year: metadata.year,
-          publisher: metadata.publisher,
-          filePath: filePath,
-        );
+        .ensureSourceForFile(filePath);
 
     ref.read(activeSourceIdProvider.notifier).state = source.id;
   }
@@ -351,6 +597,10 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<TtsState>(ttsProvider, (previous, next) {
+      _handleTtsStateChanged(next);
+    });
+
     final activeSource = ref.watch(activeSourceProvider);
     final highlightMode = ref.watch(highlightModeProvider);
 
@@ -409,6 +659,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
                   controller: _pdfController,
                   onDocumentLoaded: (details) {
                     if (!mounted) return;
+                    _setWordAnchorSourcePath(activeSource.filePath);
                     ref.read(totalPagesProvider.notifier).state =
                         details.document.pages.count;
                   },
@@ -422,27 +673,9 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
                     final text = details.selectedText;
                     setState(() => _selectedText = text);
                     ref.read(selectedTextProvider.notifier).state = text;
-
-                    if (highlightMode &&
-                        text != null &&
-                        text.trim().isNotEmpty) {
-                      _addQuote();
-                    }
                   },
                 ),
               ),
-              if (_selectedText != null &&
-                  _selectedText!.isNotEmpty &&
-                  !highlightMode)
-                Positioned(
-                  bottom: 20,
-                  right: 20,
-                  child: FloatingActionButton.extended(
-                    onPressed: _addQuote,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add to Quotes'),
-                  ),
-                ),
             ],
           ),
         );
@@ -454,6 +687,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       children: [
         _buildToolbar(highlightMode),
         const CollapsibleSpeakerCards(),
+        const TtsReadingIndicator(),
         if (_showSearchBar) _buildSearchBar(),
         mainContent,
         if (activeSource != null) _buildPageIndicator(),
@@ -526,10 +760,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
   Widget _buildToolbar(bool highlightMode) {
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
-    final serverStatus = ref.watch(ttsServerStatusProvider);
-    final ttsStatus = ref.watch(ttsStatusProvider);
-    final ttsStatusText =
-        ttsStatus.valueOrNull ?? 'Checking TTS...';
+    final modelStatus = ref.watch(modelDownloadProvider);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -544,14 +775,16 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // TTS Server Status indicator
-            _buildServerStatusIndicator(serverStatus, ttsStatusText),
+            // Model status indicator and download button
+            _buildModelStatusIndicator(modelStatus),
             const SizedBox(width: 2),
-            // TTS Controls
-            _buildTtsPlayButton(ttsState, ttsNotifier),
+            // TTS Controls (disabled if model not ready)
+            _buildTtsPlayButton(ttsState, ttsNotifier, modelStatus),
             IconButton(
               icon: const Icon(Icons.stop, size: 16),
-              onPressed: ttsState.isStopped ? null : () => ttsNotifier.stop(),
+              onPressed: (!modelStatus.isReady || ttsState.isStopped)
+                  ? null
+                  : () => ttsNotifier.stop(),
               tooltip: 'Stop',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -559,9 +792,10 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
             ),
             IconButton(
               icon: const Icon(Icons.skip_previous, size: 16),
-              onPressed: ttsState.currentParagraphIndex > 0
-                  ? () => ttsNotifier.skipBackward()
-                  : null,
+              onPressed:
+                  (!modelStatus.isReady || ttsState.currentParagraphIndex <= 0)
+                  ? null
+                  : () => ttsNotifier.skipBackward(),
               tooltip: 'Previous chunk',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -570,9 +804,11 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
             IconButton(
               icon: const Icon(Icons.skip_next, size: 16),
               onPressed:
-                  ttsState.currentParagraphIndex < ttsState.totalParagraphs - 1
-                  ? () => ttsNotifier.skipForward()
-                  : null,
+                  (!modelStatus.isReady ||
+                      ttsState.currentParagraphIndex >=
+                          ttsState.totalParagraphs - 1)
+                  ? null
+                  : () => ttsNotifier.skipForward(),
               tooltip: 'Next chunk',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -592,10 +828,11 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            _buildSpeedDropdown(ttsState, ttsNotifier),
-            const SizedBox(width: 4),
-            _buildVoiceDropdown(ttsState, ttsNotifier),
-            const SizedBox(width: 4),
+            _buildSpeedSlider(ttsState, ttsNotifier),
+            const SizedBox(width: 8),
+            // Create Audiobook button
+            _buildAudiobookButton(modelStatus),
+            const SizedBox(width: 8),
             // Zoom controls
             IconButton(
               icon: const Icon(Icons.zoom_out, size: 16),
@@ -646,29 +883,6 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             ),
-            IconButton(
-              icon: const Icon(Icons.settings, size: 16),
-              onPressed: () => showSettingsDialog(context),
-              tooltip: 'Settings',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            ),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: 'Highlight mode',
-              child: FilterChip(
-                label: const Text('H', style: TextStyle(fontSize: 12)),
-                selected: highlightMode,
-                onSelected: (value) {
-                  ref.read(highlightModeProvider.notifier).state = value;
-                },
-                avatar: Icon(
-                  highlightMode ? Icons.highlight : Icons.highlight_outlined,
-                  size: 18,
-                ),
-              ),
-            ),
             const SizedBox(width: 4),
           ],
         ),
@@ -676,44 +890,67 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     );
   }
 
-  Widget _buildServerStatusIndicator(
-    AsyncValue<bool> serverStatus,
-    String ttsStatusText,
-  ) {
-    return serverStatus.when(
-      data: (isConnected) => Tooltip(
-        message: isConnected
-            ? 'TTS: Ready ($ttsStatusText)'
-            : 'TTS: Not Ready ($ttsStatusText)',
-        child: Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isConnected ? Colors.green : Colors.red,
-          ),
-        ),
-      ),
-      loading: () => const SizedBox(
-        width: 10,
-        height: 10,
-        child: CircularProgressIndicator(strokeWidth: 1),
-      ),
-      error: (_, _) => Tooltip(
-        message: 'TTS: Error',
+  Widget _buildModelStatusIndicator(ModelDownloadStatus status) {
+    if (status.isReady) {
+      return Tooltip(
+        message: 'TTS Ready',
         child: Container(
           width: 10,
           height: 10,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.orange,
+            color: Colors.green,
           ),
         ),
+      );
+    }
+
+    if (status.isDownloading) {
+      return Tooltip(
+        message: 'Downloading TTS model... ${(status.progress * 100).toInt()}%',
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            value: status.progress > 0 ? status.progress : null,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    // Not downloaded - show download button
+    return TextButton.icon(
+      onPressed: () => showModelDownloadDialog(context),
+      icon: const Icon(Icons.cloud_download_outlined, size: 16),
+      label: const Text('Download TTS'),
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        foregroundColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
 
-  Widget _buildTtsPlayButton(TtsState state, TtsNotifier notifier) {
+  Widget _buildTtsPlayButton(
+    TtsState state,
+    TtsNotifier notifier,
+    ModelDownloadStatus modelStatus,
+  ) {
+    // If model not ready, show disabled button
+    if (!modelStatus.isReady) {
+      return IconButton(
+        icon: Icon(
+          Icons.play_arrow,
+          size: 24,
+          color: Theme.of(context).disabledColor,
+        ),
+        onPressed: null,
+        tooltip: 'Download TTS model first',
+        visualDensity: VisualDensity.compact,
+      );
+    }
+
     if (state.isLoading || _isExtractingTextForTts) {
       return Container(
         width: 40,
@@ -745,118 +982,130 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     );
   }
 
-  Widget _buildSpeedDropdown(TtsState state, TtsNotifier notifier) {
-    return PopupMenuButton<double>(
-      initialValue: state.speed,
-      onSelected: (speed) => notifier.setSpeed(speed),
-      tooltip: 'Playback speed',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).dividerColor),
-          borderRadius: BorderRadius.circular(4),
+  Widget _buildSpeedSlider(TtsState state, TtsNotifier notifier) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Slider(
+            value: state.speed,
+            min: 0.5,
+            max: 2.0,
+            divisions: 150, // 0.01 increments
+            label: '${state.speed.toStringAsFixed(2)}x',
+            onChanged: (v) =>
+                notifier.setSpeed(double.parse(v.toStringAsFixed(2))),
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              speedDisplayName(state.speed),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const Icon(Icons.arrow_drop_down, size: 16),
-          ],
+        SizedBox(
+          width: 42,
+          child: Text(
+            '${state.speed.toStringAsFixed(2)}x',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
-      ),
-      itemBuilder: (context) => speedOptions.map((speed) {
-        return PopupMenuItem<double>(
-          value: speed,
-          child: Text(speedDisplayName(speed)),
-        );
-      }).toList(),
+      ],
     );
   }
 
-  Widget _buildVoiceDropdown(TtsState state, TtsNotifier notifier) {
-    final voicesAsync = ref.watch(ttsVoicesProvider);
+  Widget _buildAudiobookButton(ModelDownloadStatus modelStatus) {
+    final activeSource = ref.watch(activeSourceProvider);
 
-    return voicesAsync.when(
-      data: (voices) {
-        final currentVoice = voices.firstWhere(
-          (v) => v.id == state.currentVoice,
-          orElse: () => voices.first,
-        );
-
-        return PopupMenuButton<String>(
-          initialValue: state.currentVoice,
-          onSelected: (voiceId) => notifier.setVoice(voiceId),
-          tooltip: 'Select voice',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  currentVoice.name,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const Icon(Icons.arrow_drop_down, size: 16),
-              ],
-            ),
-          ),
-          itemBuilder: (context) {
-            final femaleVoices = voices
-                .where((v) => v.gender == 'female')
-                .toList();
-            final maleVoices = voices.where((v) => v.gender == 'male').toList();
-
-            return [
-              const PopupMenuItem<String>(
-                enabled: false,
-                height: 28,
-                child: Text(
-                  'Female',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-              ...femaleVoices.map(
-                (voice) => PopupMenuItem<String>(
-                  value: voice.id,
-                  child: Text('${voice.name} (${voice.grade})'),
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                enabled: false,
-                height: 28,
-                child: Text(
-                  'Male',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-              ...maleVoices.map(
-                (voice) => PopupMenuItem<String>(
-                  value: voice.id,
-                  child: Text('${voice.name} (${voice.grade})'),
-                ),
-              ),
-            ];
-          },
-        );
-      },
-      loading: () => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: const SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+    return OutlinedButton.icon(
+      onPressed: (!modelStatus.isReady || activeSource == null)
+          ? null
+          : () => _handleCreateAudiobook(),
+      icon: const Icon(Icons.audiotrack, size: 16),
+      label: const Text('Create Audiobook'),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        textStyle: const TextStyle(fontSize: 12),
       ),
-      error: (_, _) => const SizedBox.shrink(),
     );
+  }
+
+  Future<void> _handleCreateAudiobook() async {
+    final activeSource = ref.read(activeSourceProvider);
+    final ttsState = ref.read(ttsProvider);
+    if (activeSource == null) return;
+
+    // Extract all text from PDF
+    final file = File(activeSource.filePath);
+    if (!file.existsSync()) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('PDF file not found')));
+      }
+      return;
+    }
+
+    setState(() => _isExtractingTextForTts = true);
+
+    try {
+      final bytes = await file.readAsBytes();
+      final document = pdf.PdfDocument(inputBytes: bytes);
+      final chunks = <String>[];
+
+      // Extract text from each page
+      for (int i = 0; i < document.pages.count; i++) {
+        final text = pdf.PdfTextExtractor(
+          document,
+        ).extractText(startPageIndex: i, endPageIndex: i);
+        final normalized = _normalizeExtractedPdfText(text);
+        if (normalized.isNotEmpty) {
+          // Split into paragraphs
+          final paragraphs = normalized.split(RegExp(r'\n\s*\n'));
+          for (final para in paragraphs) {
+            final trimmed = para.trim();
+            if (trimmed.isNotEmpty && trimmed.length > 10) {
+              chunks.add(trimmed);
+            }
+          }
+        }
+      }
+
+      document.dispose();
+
+      setState(() => _isExtractingTextForTts = false);
+
+      if (chunks.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('No text found in PDF')));
+        }
+        return;
+      }
+
+      await ref
+          .read(audiobookJobsProvider.notifier)
+          .enqueue(
+            title: activeSource.title,
+            chunks: chunks,
+            voice: ttsState.currentVoice,
+            speed: ttsState.speed,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Audiobook job queued (${chunks.length} chunks). Track it in Jobs.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isExtractingTextForTts = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error extracting text: $e')));
+      }
+    }
   }
 
   Widget _buildSearchBar() {

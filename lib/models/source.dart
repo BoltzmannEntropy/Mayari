@@ -1,5 +1,3 @@
-import 'quote.dart';
-
 class Source {
   final String id;
   final String title;
@@ -8,7 +6,6 @@ class Source {
   final String? publisher;
   final String filePath;
   final DateTime createdAt;
-  List<Quote> quotes;
 
   Source({
     required this.id,
@@ -18,8 +15,7 @@ class Source {
     this.publisher,
     required this.filePath,
     required this.createdAt,
-    List<Quote>? quotes,
-  }) : quotes = quotes ?? [];
+  });
 
   String get citation {
     final pub = publisher != null ? ' $publisher.' : '';
@@ -34,7 +30,6 @@ class Source {
         'publisher': publisher,
         'filePath': filePath,
         'createdAt': createdAt.toIso8601String(),
-        'quotes': quotes.map((q) => q.toJson()).toList(),
       };
 
   factory Source.fromJson(Map<String, dynamic> json) => Source(
@@ -45,10 +40,6 @@ class Source {
         publisher: json['publisher'] as String?,
         filePath: json['filePath'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),
-        quotes: (json['quotes'] as List<dynamic>?)
-                ?.map((q) => Quote.fromJson(q as Map<String, dynamic>))
-                .toList() ??
-            [],
       );
 
   Source copyWith({
@@ -59,7 +50,6 @@ class Source {
     String? publisher,
     String? filePath,
     DateTime? createdAt,
-    List<Quote>? quotes,
   }) =>
       Source(
         id: id ?? this.id,
@@ -69,6 +59,5 @@ class Source {
         publisher: publisher ?? this.publisher,
         filePath: filePath ?? this.filePath,
         createdAt: createdAt ?? this.createdAt,
-        quotes: quotes ?? this.quotes,
       );
 }

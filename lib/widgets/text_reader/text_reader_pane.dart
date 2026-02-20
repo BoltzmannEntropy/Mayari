@@ -4,7 +4,10 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/text_reader_provider.dart';
 import '../../providers/tts_provider.dart';
+import '../../providers/model_download_provider.dart';
+import '../dialogs/model_download_dialog.dart';
 import '../tts/speaker_cards.dart';
+import '../tts/tts_reading_indicator.dart';
 
 class TextReaderPane extends ConsumerStatefulWidget {
   const TextReaderPane({super.key});
@@ -105,6 +108,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
               _buildTtsToolbar(context),
               // Voice cards panel
               const CollapsibleSpeakerCards(),
+              const TtsReadingIndicator(),
               // Header toolbar with Edit/Reset
               _buildHeaderToolbar(context, textState),
               const Divider(height: 1),
@@ -124,10 +128,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
   Widget _buildTtsToolbar(BuildContext context) {
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
-    final serverStatus = ref.watch(ttsServerStatusProvider);
-    final ttsStatus = ref.watch(ttsStatusProvider);
-    final ttsStatusText =
-        ttsStatus.valueOrNull ?? 'Checking TTS...';
+    final modelStatus = ref.watch(modelDownloadProvider);
     final textState = ref.watch(textReaderProvider);
 
     return Container(
@@ -143,14 +144,16 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // TTS Server Status indicator
-            _buildServerStatusIndicator(serverStatus, ttsStatusText),
+            // Model status indicator
+            _buildModelStatusIndicator(modelStatus),
             const SizedBox(width: 2),
-            // TTS Controls
-            _buildTtsPlayButton(ttsState, ttsNotifier, textState),
+            // TTS Controls (disabled if model not ready)
+            _buildTtsPlayButton(ttsState, ttsNotifier, textState, modelStatus),
             IconButton(
               icon: const Icon(Icons.stop, size: 16),
-              onPressed: ttsState.isStopped ? null : () => ttsNotifier.stop(),
+              onPressed: (!modelStatus.isReady || ttsState.isStopped)
+                  ? null
+                  : () => ttsNotifier.stop(),
               tooltip: 'Stop',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -159,9 +162,10 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
             // Skip backward
             IconButton(
               icon: const Icon(Icons.skip_previous, size: 16),
-              onPressed: ttsState.currentParagraphIndex > 0
-                  ? () => ttsNotifier.skipBackward()
-                  : null,
+              onPressed:
+                  (!modelStatus.isReady || ttsState.currentParagraphIndex <= 0)
+                  ? null
+                  : () => ttsNotifier.skipBackward(),
               tooltip: 'Previous paragraph',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -171,66 +175,75 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
             IconButton(
               icon: const Icon(Icons.skip_next, size: 16),
               onPressed:
-                  ttsState.currentParagraphIndex < ttsState.totalParagraphs - 1
-                  ? () => ttsNotifier.skipForward()
-                  : null,
+                  (!modelStatus.isReady ||
+                      ttsState.currentParagraphIndex >=
+                          ttsState.totalParagraphs - 1)
+                  ? null
+                  : () => ttsNotifier.skipForward(),
               tooltip: 'Next paragraph',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             ),
-            const SizedBox(width: 8),
-            // Speed dropdown
-            _buildSpeedDropdown(ttsState, ttsNotifier),
-            const SizedBox(width: 4),
-            // Voice dropdown
-            _buildVoiceDropdown(ttsState, ttsNotifier),
-            const SizedBox(width: 8),
-            // Paragraph indicator
-            if (ttsState.totalParagraphs > 0)
-              Text(
-                '${ttsState.currentParagraphIndex + 1}/${ttsState.totalParagraphs}',
+            Container(
+              margin: const EdgeInsets.only(left: 2, right: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                ttsState.totalParagraphs == 0
+                    ? '0/0'
+                    : '${ttsState.currentParagraphIndex + 1}/${ttsState.totalParagraphs}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+            ),
+            _buildSpeedSlider(ttsState, ttsNotifier),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildServerStatusIndicator(
-    AsyncValue<bool> serverStatus,
-    String ttsStatusText,
-  ) {
-    return serverStatus.when(
-      data: (isConnected) => Tooltip(
-        message: isConnected
-            ? 'TTS: Ready ($ttsStatusText)'
-            : 'TTS: Not Ready ($ttsStatusText)',
-        child: Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isConnected ? Colors.green : Colors.red,
-          ),
-        ),
-      ),
-      loading: () => const SizedBox(
-        width: 10,
-        height: 10,
-        child: CircularProgressIndicator(strokeWidth: 1),
-      ),
-      error: (_, _) => Tooltip(
-        message: 'TTS: Error',
+  Widget _buildModelStatusIndicator(ModelDownloadStatus status) {
+    if (status.isReady) {
+      return Tooltip(
+        message: 'TTS Ready',
         child: Container(
           width: 10,
           height: 10,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.orange,
+            color: Colors.green,
           ),
         ),
+      );
+    }
+
+    if (status.isDownloading) {
+      return Tooltip(
+        message: 'Downloading TTS model... ${(status.progress * 100).toInt()}%',
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            value: status.progress > 0 ? status.progress : null,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    // Not downloaded - show download button
+    return TextButton.icon(
+      onPressed: () => showModelDownloadDialog(context),
+      icon: const Icon(Icons.cloud_download_outlined, size: 16),
+      label: const Text('Download TTS'),
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        foregroundColor: Theme.of(context).colorScheme.primary,
       ),
     );
   }
@@ -239,7 +252,22 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
     TtsState state,
     TtsNotifier notifier,
     TextReaderState textState,
+    ModelDownloadStatus modelStatus,
   ) {
+    // If model not ready, show disabled button
+    if (!modelStatus.isReady) {
+      return IconButton(
+        icon: Icon(
+          Icons.play_arrow,
+          size: 24,
+          color: Theme.of(context).disabledColor,
+        ),
+        onPressed: null,
+        tooltip: 'Download TTS model first',
+        visualDensity: VisualDensity.compact,
+      );
+    }
+
     if (state.isLoading) {
       return Container(
         width: 40,
@@ -271,117 +299,30 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
     );
   }
 
-  Widget _buildSpeedDropdown(TtsState state, TtsNotifier notifier) {
-    return PopupMenuButton<double>(
-      initialValue: state.speed,
-      onSelected: (speed) => notifier.setSpeed(speed),
-      tooltip: 'Playback speed',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).dividerColor),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              speedDisplayName(state.speed),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const Icon(Icons.arrow_drop_down, size: 16),
-          ],
-        ),
-      ),
-      itemBuilder: (context) => speedOptions.map((speed) {
-        return PopupMenuItem<double>(
-          value: speed,
-          child: Text(speedDisplayName(speed)),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildVoiceDropdown(TtsState state, TtsNotifier notifier) {
-    final voicesAsync = ref.watch(ttsVoicesProvider);
-
-    return voicesAsync.when(
-      data: (voices) {
-        final currentVoice = voices.firstWhere(
-          (v) => v.id == state.currentVoice,
-          orElse: () => voices.first,
-        );
-
-        return PopupMenuButton<String>(
-          initialValue: state.currentVoice,
-          onSelected: (voiceId) => notifier.setVoice(voiceId),
-          tooltip: 'Select voice',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  currentVoice.name,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const Icon(Icons.arrow_drop_down, size: 16),
-              ],
-            ),
+  Widget _buildSpeedSlider(TtsState state, TtsNotifier notifier) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Slider(
+            value: state.speed,
+            min: 0.5,
+            max: 2.0,
+            divisions: 150,
+            label: '${state.speed.toStringAsFixed(2)}x',
+            onChanged: (v) =>
+                notifier.setSpeed(double.parse(v.toStringAsFixed(2))),
           ),
-          itemBuilder: (context) {
-            final femaleVoices = voices
-                .where((v) => v.gender == 'female')
-                .toList();
-            final maleVoices = voices.where((v) => v.gender == 'male').toList();
-
-            return [
-              const PopupMenuItem<String>(
-                enabled: false,
-                height: 28,
-                child: Text(
-                  'Female',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-              ...femaleVoices.map(
-                (voice) => PopupMenuItem<String>(
-                  value: voice.id,
-                  child: Text('${voice.name} (${voice.grade})'),
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                enabled: false,
-                height: 28,
-                child: Text(
-                  'Male',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-              ...maleVoices.map(
-                (voice) => PopupMenuItem<String>(
-                  value: voice.id,
-                  child: Text('${voice.name} (${voice.grade})'),
-                ),
-              ),
-            ];
-          },
-        );
-      },
-      loading: () => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: const SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(strokeWidth: 2),
         ),
-      ),
-      error: (_, _) => const SizedBox.shrink(),
+        SizedBox(
+          width: 42,
+          child: Text(
+            '${state.speed.toStringAsFixed(2)}x',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
     );
   }
 

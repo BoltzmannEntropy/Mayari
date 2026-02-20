@@ -1,13 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import '../providers/library_provider.dart';
 import '../providers/pdf_provider.dart';
 import '../providers/sources_provider.dart';
 import '../providers/text_reader_provider.dart';
 import '../widgets/library/library_sidebar.dart';
 import '../widgets/logs/logs_panel.dart';
 import '../widgets/pdf_viewer/pdf_viewer_pane.dart';
-import '../widgets/quotes_panel/quotes_panel.dart';
 import '../widgets/text_reader/text_reader_pane.dart';
 
 class WorkspaceScreen extends ConsumerStatefulWidget {
@@ -19,13 +21,20 @@ class WorkspaceScreen extends ConsumerStatefulWidget {
 
 class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   static const double _libraryWidth = 200;
-  double _splitPosition = 0.55; // Position between PDF viewer and quotes panel
   final FocusNode _keyboardFocusNode = FocusNode();
+  bool _initialSourceSelected = false;
 
   @override
   void initState() {
     super.initState();
     _keyboardFocusNode.requestFocus();
+
+    // Set callback to auto-select default source when loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(sourcesProvider.notifier).setOnDefaultSourceLoaded((sourceId) {
+        ref.read(activeSourceIdProvider.notifier).state = sourceId;
+      });
+    });
   }
 
   @override
@@ -74,46 +83,22 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   }
 
   void _handleKeyEvent(KeyEvent event) {
-    if (event is KeyDownEvent) {
-      final isCmd =
-          HardwareKeyboard.instance.isMetaPressed ||
-          HardwareKeyboard.instance.isControlPressed;
-
-      if (isCmd && event.logicalKey == LogicalKeyboardKey.keyH) {
-        final current = ref.read(highlightModeProvider);
-        ref.read(highlightModeProvider.notifier).state = !current;
-      }
-
-      if (isCmd && event.logicalKey == LogicalKeyboardKey.keyD) {
-        final source = ref.read(activeSourceProvider);
-        final text = ref.read(selectedTextProvider);
-        final page = ref.read(currentPageProvider);
-
-        if (source != null && text != null && text.isNotEmpty) {
-          ref
-              .read(sourcesProvider.notifier)
-              .addQuote(sourceId: source.id, text: text, pageNumber: page)
-              .then((added) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      added
-                          ? 'Quote added from page $page'
-                          : 'Quote already saved',
-                    ),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              });
-        }
-      }
-    }
+    // Keyboard shortcuts handled by individual panes
   }
 
   @override
   Widget build(BuildContext context) {
     final activeSource = ref.watch(activeSourceProvider);
+    final sources = ref.watch(sourcesProvider);
+    final activeSourceId = ref.watch(activeSourceIdProvider);
+
+    // Auto-select first source if none selected and sources exist
+    if (!_initialSourceSelected && activeSourceId == null && sources.isNotEmpty) {
+      _initialSourceSelected = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(activeSourceIdProvider.notifier).state = sources.first.id;
+      });
+    }
 
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
@@ -141,25 +126,19 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           children: [
             // Main content area
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final availableWidth = constraints.maxWidth - _libraryWidth;
-                  final pdfWidth = availableWidth * _splitPosition;
-                  final quotesWidth = availableWidth * (1 - _splitPosition);
-
-                  final contentSource = ref.watch(activeContentSourceProvider);
-
-                  return Row(
-                    children: [
-                      // Library sidebar (fixed width)
-                      const SizedBox(
-                        width: _libraryWidth,
-                        child: LibrarySidebar(),
-                      ),
-                      // Main content area (PDF or Text)
-                      SizedBox(
-                        width: pdfWidth - 4,
-                        child: Column(
+              child: Row(
+                children: [
+                  // Library sidebar (fixed width)
+                  const SizedBox(
+                    width: _libraryWidth,
+                    child: LibrarySidebar(),
+                  ),
+                  // Main content area (PDF or Text)
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final contentSource = ref.watch(activeContentSourceProvider);
+                        return Column(
                           children: [
                             // Content source toggle
                             _buildContentToggle(context, contentSource),
@@ -170,43 +149,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                                   : const TextReaderPane(),
                             ),
                           ],
-                        ),
-                      ),
-                      // Resizable divider
-                      MouseRegion(
-                        cursor: SystemMouseCursors.resizeColumn,
-                        child: GestureDetector(
-                          onHorizontalDragUpdate: (details) {
-                            setState(() {
-                              _splitPosition +=
-                                  details.delta.dx / availableWidth;
-                              _splitPosition = _splitPosition.clamp(0.3, 0.75);
-                            });
-                          },
-                          child: Container(
-                            width: 8,
-                            color: Theme.of(context).dividerColor,
-                            child: Center(
-                              child: Container(
-                                width: 4,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Quotes panel
-                      SizedBox(
-                        width: quotesWidth - 4,
-                        child: const QuotesPanel(),
-                      ),
-                    ],
-                  );
-                },
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
             // System logs panel at bottom

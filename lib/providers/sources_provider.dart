@@ -1,13 +1,19 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../models/source.dart';
-import '../models/quote.dart';
 import '../services/storage_service.dart';
 
 final storageServiceProvider = Provider((ref) => StorageService());
 
-final sourcesProvider =
-    StateNotifierProvider<SourcesNotifier, List<Source>>((ref) {
+/// Callback to set active source after default PDF is loaded
+typedef SetActiveSourceCallback = void Function(String sourceId);
+
+final sourcesProvider = StateNotifierProvider<SourcesNotifier, List<Source>>((
+  ref,
+) {
   final storage = ref.watch(storageServiceProvider);
   return SourcesNotifier(storage);
 });
@@ -28,18 +34,95 @@ final activeSourceProvider = Provider<Source?>((ref) {
 class SourcesNotifier extends StateNotifier<List<Source>> {
   final StorageService _storage;
   final _uuid = const Uuid();
+  SetActiveSourceCallback? _onDefaultSourceLoaded;
 
   SourcesNotifier(this._storage) : super([]) {
     _loadSources();
   }
 
+  /// Set callback to be called when default source is loaded
+  void setOnDefaultSourceLoaded(SetActiveSourceCallback callback) {
+    _onDefaultSourceLoaded = callback;
+  }
+
   Future<void> _loadSources() async {
     final loaded = await _storage.loadSources();
-    final deduped = _dedupeSources(loaded);
-    state = deduped.sources;
-    if (deduped.didChange) {
-      await _save();
+    state = loaded;
+
+    // If no sources exist, try to load the bundled default PDF
+    if (loaded.isEmpty) {
+      await _loadBundledDefaultPdf();
     }
+  }
+
+  /// Find and load the bundled genesis-chapter-1.pdf on first launch
+  Future<void> _loadBundledDefaultPdf() async {
+    final pdfPath = _findBundledPdf();
+    if (pdfPath == null) {
+      debugPrint('No bundled PDF found');
+      return;
+    }
+
+    debugPrint('Found bundled PDF: $pdfPath');
+
+    // Add it as the first source
+    final source = await addSource(
+      title: 'Genesis Chapter 1',
+      author: 'King James Version',
+      year: 1611,
+      publisher: 'Public Domain',
+      filePath: pdfPath,
+    );
+
+    // Notify to set as active source
+    _onDefaultSourceLoaded?.call(source.id);
+  }
+
+  /// Find the bundled PDF in common locations
+  String? _findBundledPdf() {
+    const pdfName = 'genesis-chapter-1.pdf';
+
+    // Candidate paths for the bundled PDF
+    final candidates = <String>[];
+
+    if (!kIsWeb && Platform.isMacOS) {
+      // macOS app bundle: Contents/Resources/pdf/
+      final executable = Platform.resolvedExecutable;
+      final contentsDir = p.dirname(p.dirname(executable));
+      candidates.add(p.join(contentsDir, 'Resources', 'pdf', pdfName));
+      candidates.add(p.join(contentsDir, 'Resources', pdfName));
+
+      // Development mode: project pdf/ folder (various locations)
+      final current = Directory.current.path;
+      candidates.add(p.join(current, 'pdf', pdfName));
+
+      // Try to find from executable path going up
+      var dir = Directory(p.dirname(executable));
+      for (var i = 0; i < 10; i++) {
+        final candidate = p.join(dir.path, 'pdf', pdfName);
+        candidates.add(candidate);
+        dir = dir.parent;
+      }
+
+      // Hardcoded development path as fallback
+      candidates.add(
+        '/Volumes/SSD4tb/Dropbox/DSS/artifacts/code/MayariPRJ/MayariCODE/pdf/$pdfName',
+      );
+    }
+
+    debugPrint(
+      'Searching for bundled PDF in ${candidates.length} locations...',
+    );
+    for (final path in candidates) {
+      final file = File(path);
+      if (file.existsSync()) {
+        debugPrint('Found bundled PDF: $path');
+        return file.path;
+      }
+    }
+
+    debugPrint('Bundled PDF not found in any location');
+    return null;
   }
 
   Future<void> _save() async {
@@ -67,6 +150,20 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
     return source;
   }
 
+  /// Return existing source for a file, or create one with sensible defaults.
+  Future<Source> ensureSourceForFile(String filePath) async {
+    final existing = state.where((s) => s.filePath == filePath).firstOrNull;
+    if (existing != null) return existing;
+
+    return addSource(
+      title: p.basenameWithoutExtension(filePath),
+      author: 'Unknown Author',
+      year: DateTime.now().year,
+      publisher: null,
+      filePath: filePath,
+    );
+  }
+
   Future<void> updateSource(Source source) async {
     state = state.map((s) => s.id == source.id ? source : s).toList();
     await _save();
@@ -76,145 +173,4 @@ class SourcesNotifier extends StateNotifier<List<Source>> {
     state = state.where((s) => s.id != sourceId).toList();
     await _save();
   }
-
-  Future<bool> addQuote({
-    required String sourceId,
-    required String text,
-    required int pageNumber,
-    String? notes,
-  }) async {
-    final normalizedText = _normalizeQuoteText(text);
-    if (normalizedText.isEmpty) return false;
-
-    final source = state.firstWhere((s) => s.id == sourceId);
-    final alreadyExists = source.quotes.any(
-      (q) =>
-          _normalizeQuoteText(q.text) == normalizedText &&
-          q.pageNumber == pageNumber,
-    );
-
-    if (alreadyExists) return false;
-
-    final quote = Quote(
-      id: _uuid.v4(),
-      sourceId: sourceId,
-      text: text.trim(),
-      pageNumber: pageNumber,
-      notes: notes,
-      createdAt: DateTime.now(),
-      order: _getNextOrder(sourceId),
-    );
-
-    state = state.map((s) {
-      if (s.id == sourceId) {
-        return s.copyWith(quotes: [...s.quotes, quote]);
-      }
-      return s;
-    }).toList();
-    await _save();
-    return true;
-  }
-
-  int _getNextOrder(String sourceId) {
-    final source = state.firstWhere((s) => s.id == sourceId);
-    if (source.quotes.isEmpty) return 0;
-    return source.quotes.map((q) => q.order).reduce((a, b) => a > b ? a : b) + 1;
-  }
-
-  Future<void> updateQuote(Quote quote) async {
-    state = state.map((s) {
-      if (s.id == quote.sourceId) {
-        return s.copyWith(
-          quotes: s.quotes.map((q) => q.id == quote.id ? quote : q).toList(),
-        );
-      }
-      return s;
-    }).toList();
-    await _save();
-  }
-
-  Future<void> removeQuote(String sourceId, String quoteId) async {
-    state = state.map((s) {
-      if (s.id == sourceId) {
-        return s.copyWith(
-          quotes: s.quotes.where((q) => q.id != quoteId).toList(),
-        );
-      }
-      return s;
-    }).toList();
-    await _save();
-  }
-
-  Future<void> reorderQuotes(String sourceId, int oldIndex, int newIndex) async {
-    state = state.map((s) {
-      if (s.id == sourceId) {
-        final quotes = List.of(s.quotes);
-        final quote = quotes.removeAt(oldIndex);
-        quotes.insert(newIndex, quote);
-        for (int i = 0; i < quotes.length; i++) {
-          quotes[i] = quotes[i].copyWith(order: i);
-        }
-        return s.copyWith(quotes: quotes);
-      }
-      return s;
-    }).toList();
-    await _save();
-  }
-
-  String _normalizeQuoteText(String text) {
-    return text.trim().replaceAll(RegExp(r'\s+'), ' ');
-  }
-
-  _DedupeResult _dedupeSources(List<Source> sources) {
-    var didChange = false;
-
-    final updated = sources.map((source) {
-      var sourceChanged = false;
-      final quotesByOrder = List<Quote>.from(source.quotes)
-        ..sort((a, b) => a.order.compareTo(b.order));
-
-      final seen = <String>{};
-      final deduped = <Quote>[];
-
-      for (final quote in quotesByOrder) {
-        final key =
-            '${_normalizeQuoteText(quote.text)}::${quote.pageNumber}';
-        if (seen.add(key)) {
-          deduped.add(quote);
-        } else {
-          sourceChanged = true;
-        }
-      }
-
-      final reindexed = <Quote>[];
-      for (var i = 0; i < deduped.length; i++) {
-        final quote = deduped[i];
-        if (quote.order != i) {
-          reindexed.add(quote.copyWith(order: i));
-          sourceChanged = true;
-        } else {
-          reindexed.add(quote);
-        }
-      }
-
-      if (reindexed.length != source.quotes.length) {
-        sourceChanged = true;
-      }
-
-      if (sourceChanged) {
-        didChange = true;
-        return source.copyWith(quotes: reindexed);
-      }
-      return source;
-    }).toList();
-
-    return _DedupeResult(updated, didChange);
-  }
-}
-
-class _DedupeResult {
-  final List<Source> sources;
-  final bool didChange;
-
-  const _DedupeResult(this.sources, this.didChange);
 }
