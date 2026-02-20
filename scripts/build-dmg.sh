@@ -1,6 +1,7 @@
 #!/bin/bash
 # Mayari DMG Builder Script
 # Creates a distributable DMG file for macOS
+# Now Python-free! Uses native Swift KokoroTTS
 
 set -e
 
@@ -14,7 +15,7 @@ DMG_NAME="Mayari"
 VERSION=$(grep 'version:' "$PROJECT_DIR/pubspec.yaml" | head -1 | cut -d'+' -f1 | cut -d':' -f2 | xargs)
 
 echo "========================================"
-echo "Mayari DMG Builder"
+echo "Mayari DMG Builder (Native Swift TTS)"
 echo "Version: $VERSION"
 echo "========================================"
 echo ""
@@ -41,6 +42,12 @@ print_error() {
 if [[ "$OSTYPE" != "darwin"* ]]; then
     print_error "This script is only for macOS"
     exit 1
+fi
+
+# Check macOS version (need 15.0+ for KokoroSwift)
+MACOS_VERSION=$(sw_vers -productVersion | cut -d. -f1)
+if [ "$MACOS_VERSION" -lt 15 ]; then
+    print_warning "macOS 15.0+ recommended for native TTS. Current: $(sw_vers -productVersion)"
 fi
 
 # Check for create-dmg (optional but recommended)
@@ -109,26 +116,24 @@ if [ -f "$PROJECT_DIR/BINARY-LICENSE.txt" ]; then
     cp "$PROJECT_DIR/BINARY-LICENSE.txt" "$DMG_DIR/BINARY-LICENSE.txt"
 fi
 
-# Embed backend runtime into app bundle resources for first-run autostart.
-mkdir -p "$RESOURCES_DIR/backend"
-cp -R "$PROJECT_DIR/backend/." "$RESOURCES_DIR/backend/"
-rm -rf "$RESOURCES_DIR/backend/outputs" \
-       "$RESOURCES_DIR/backend/__pycache__" \
-       "$RESOURCES_DIR/backend/.pytest_cache"
-print_status "Bundled backend copied into app resources"
+# No Python backend needed - using native Swift TTS!
+print_status "Native Swift TTS - no Python backend required"
 
 # Create README for DMG
 cat > "$DMG_DIR/README.txt" << 'EOF'
-Mayari PDF Reader with Kokoro TTS
-=================================
+Mayari PDF Reader with Native Kokoro TTS
+========================================
 
 Installation:
 1. Drag "Mayari.app" to your Applications folder
 2. Launch "Mayari.app" from Applications
-3. The bundled audio backend starts automatically in-app
 
-Note: The Kokoro TTS model will download automatically on first use.
-This requires ~500MB of disk space and internet connection.
+Requirements:
+- macOS 15.0 (Sequoia) or later
+- Apple Silicon (M1/M2/M3/M4) recommended
+
+Note: The Kokoro TTS model (~350MB) will download automatically
+on first use. This requires an internet connection.
 
 For more information, visit the project repository.
 EOF
@@ -205,16 +210,14 @@ if [ -f "$RELEASE_NOTES_SRC" ]; then
 fi
 
 echo ""
-echo "Step 5: Cleanup..."
+echo "Step 5: Summary..."
 echo "-------------------"
 
-# Optionally clean up staging directory
-# rm -rf "$DMG_DIR"
 print_status "DMG staging kept at: $DMG_DIR"
 
 echo ""
 echo "========================================"
-echo "Build Complete!"
+echo "Build Complete! (Python-Free)"
 echo "========================================"
 echo ""
 echo "DMG file: $DMG_FINAL"

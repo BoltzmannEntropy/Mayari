@@ -1,15 +1,15 @@
 #!/bin/bash
 # Mayari Installation Script
-# Installs all dependencies and sets up the environment for development
+# Sets up the environment for development (Python-free native Swift TTS)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BACKEND_DIR="$PROJECT_DIR/backend"
 
 echo "========================================"
 echo "Mayari PDF Reader - Installation Script"
+echo "(Native Swift TTS - Python-Free)"
 echo "========================================"
 echo ""
 
@@ -40,21 +40,22 @@ fi
 echo "Step 1: Checking prerequisites..."
 echo "-----------------------------------"
 
+# Check macOS version
+MACOS_VERSION=$(sw_vers -productVersion)
+MACOS_MAJOR=$(echo "$MACOS_VERSION" | cut -d. -f1)
+if [ "$MACOS_MAJOR" -lt 15 ]; then
+    print_warning "macOS 15.0+ required for native TTS. Current: $MACOS_VERSION"
+    print_warning "The app will build but TTS may not work."
+else
+    print_status "macOS $MACOS_VERSION (Sequoia or later)"
+fi
+
 # Check for Homebrew
 if ! command -v brew &> /dev/null; then
     print_warning "Homebrew not found. Installing..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 else
     print_status "Homebrew found"
-fi
-
-# Check for Python 3
-if ! command -v python3 &> /dev/null; then
-    print_warning "Python 3 not found. Installing..."
-    brew install python@3.11
-else
-    PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
-    print_status "Python 3 found (version $PYTHON_VERSION)"
 fi
 
 # Check for Flutter
@@ -67,39 +68,18 @@ else
     print_status "Flutter found ($FLUTTER_VERSION)"
 fi
 
-echo ""
-echo "Step 2: Setting up Python backend..."
-echo "-------------------------------------"
-
-# Create backend virtual environment
-if [ ! -d "$BACKEND_DIR/.venv" ]; then
-    echo "Creating Python virtual environment..."
-    python3 -m venv "$BACKEND_DIR/.venv"
-    print_status "Virtual environment created"
+# Check for Xcode
+if ! command -v xcodebuild &> /dev/null; then
+    print_error "Xcode command line tools not found."
+    print_error "Install via: xcode-select --install"
+    exit 1
 else
-    print_status "Virtual environment already exists"
+    XCODE_VERSION=$(xcodebuild -version | head -1)
+    print_status "$XCODE_VERSION"
 fi
 
-# Activate and install dependencies
-echo "Installing Python dependencies..."
-source "$BACKEND_DIR/.venv/bin/activate"
-
-# Upgrade pip
-pip install --upgrade pip > /dev/null 2>&1
-
-# Install requirements
-if [ -f "$BACKEND_DIR/requirements.txt" ]; then
-    pip install -r "$BACKEND_DIR/requirements.txt"
-    print_status "Python dependencies installed"
-else
-    print_warning "requirements.txt not found, installing defaults..."
-    pip install fastapi uvicorn pydantic soundfile numpy kokoro
-fi
-
-deactivate
-
 echo ""
-echo "Step 3: Setting up Flutter..."
+echo "Step 2: Setting up Flutter..."
 echo "------------------------------"
 
 cd "$PROJECT_DIR"
@@ -114,43 +94,42 @@ flutter config --no-enable-web > /dev/null 2>&1
 print_status "Configured for macOS only"
 
 echo ""
+echo "Step 3: Adding KokoroSwift Package..."
+echo "--------------------------------------"
+echo ""
+echo "To add KokoroSwift, open the Xcode project and add the package:"
+echo ""
+echo "  1. Open: macos/Runner.xcworkspace"
+echo "  2. File > Add Package Dependencies..."
+echo "  3. Enter: https://github.com/mlalma/kokoro-ios"
+echo "  4. Select version 1.0.8 or later"
+echo "  5. Add to target: Runner"
+echo ""
+print_warning "Manual step required - see instructions above"
+
+echo ""
 echo "Step 4: Setting up mayarictl..."
 echo "--------------------------------"
 
 # Make mayarictl executable
-chmod +x "$PROJECT_DIR/bin/mayarictl"
-print_status "mayarictl configured"
-
-# Create symbolic link in /usr/local/bin if desired
-if [ -d "/usr/local/bin" ]; then
-    if [ ! -L "/usr/local/bin/mayarictl" ]; then
-        echo "Do you want to create a symlink in /usr/local/bin for global access? (y/n)"
-        read -r response
-        if [[ "$response" =~ ^[Yy]$ ]]; then
-            sudo ln -sf "$PROJECT_DIR/bin/mayarictl" /usr/local/bin/mayarictl
-            print_status "Symlink created at /usr/local/bin/mayarictl"
-        fi
-    else
-        print_status "Symlink already exists at /usr/local/bin/mayarictl"
-    fi
+if [ -f "$PROJECT_DIR/bin/mayarictl" ]; then
+    chmod +x "$PROJECT_DIR/bin/mayarictl"
+    print_status "mayarictl configured"
+else
+    print_warning "mayarictl not found"
 fi
 
 echo ""
-echo "Step 5: First-time Kokoro model download..."
-echo "--------------------------------------------"
-echo "Note: The Kokoro TTS model will download automatically on first use."
-echo "This may take a few minutes depending on your internet connection."
-echo ""
-
 echo "========================================"
 echo "Installation Complete!"
 echo "========================================"
 echo ""
-echo "To start Mayari:"
-echo "  1. Start the TTS server:  mayarictl tts start"
-echo "  2. Run the app:           mayarictl run"
+echo "To run Mayari in development:"
+echo "  flutter run -d macos"
 echo ""
-echo "Or run both with:          mayarictl start"
+echo "To build for release:"
+echo "  ./scripts/build-dmg.sh"
 echo ""
-echo "For help:                  mayarictl help"
+echo "Note: The Kokoro TTS model (~350MB) will download"
+echo "automatically on first use."
 echo ""

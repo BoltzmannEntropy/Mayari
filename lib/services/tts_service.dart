@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
-import 'backend_service.dart';
+import 'package:path/path.dart' as path;
 
 /// Voice metadata for Kokoro British voices
 class TtsVoice {
@@ -34,7 +35,7 @@ class TtsVoice {
   String get displayName => '$name ($grade)';
 }
 
-/// Available British voices (fallback if server unavailable)
+/// Available British voices (fallback if native unavailable)
 const List<TtsVoice> defaultVoices = [
   TtsVoice(
     id: 'bf_emma',
@@ -52,21 +53,33 @@ const List<TtsVoice> defaultVoices = [
   TtsVoice(id: 'bm_daniel', name: 'Daniel', gender: 'male', grade: 'D'),
 ];
 
-/// Service for managing Kokoro TTS server and audio playback
+/// Model download status
+enum ModelDownloadStatus {
+  notDownloaded,
+  downloading,
+  downloaded,
+  error,
+}
+
+/// Service for managing Kokoro TTS using native Swift implementation
 class TtsService {
-  static const int _defaultServerPort = 8787;
-  static const String _defaultServerHost = '127.0.0.1';
-  static const int _serverPort = int.fromEnvironment(
-    'MAYARI_BACKEND_PORT',
-    defaultValue: _defaultServerPort,
-  );
-  static const String _serverHost = String.fromEnvironment(
-    'MAYARI_BACKEND_HOST',
-    defaultValue: _defaultServerHost,
-  );
+  static const MethodChannel _channel = MethodChannel('com.mayari.tts');
 
   final AudioPlayer _audioPlayer = AudioPlayer();
-  final BackendService _backendService = BackendService();
+
+  // Model download URLs
+  static const String _modelUrl =
+      'https://huggingface.co/mlx-community/Kokoro-82M-bf16/resolve/main/kokoro-v1_0.safetensors';
+  static const String _voicesUrl =
+      'https://raw.githubusercontent.com/mlalma/KokoroTestApp/main/Resources/voices.npz';
+
+  // Download progress
+  final StreamController<double> _downloadProgressController =
+      StreamController<double>.broadcast();
+  Stream<double> get downloadProgress => _downloadProgressController.stream;
+
+  ModelDownloadStatus _downloadStatus = ModelDownloadStatus.notDownloaded;
+  ModelDownloadStatus get downloadStatus => _downloadStatus;
 
   /// Stream of player state changes
   Stream<PlayerState> get playerStateStream => _audioPlayer.playerStateStream;
@@ -77,58 +90,198 @@ class TtsService {
   /// Audio duration
   Duration? get duration => _audioPlayer.duration;
 
-  /// Get the base URL for the TTS server
-  String get _baseUrl => 'http://$_serverHost:$_serverPort';
-
-  Future<bool> _checkServerHealth({
-    Duration timeout = const Duration(seconds: 2),
-  }) async {
+  /// Check if native TTS is available (macOS 15.0+)
+  Future<bool> isNativeAvailable() async {
     try {
-      final response = await http
-          .get(Uri.parse('$_baseUrl/health'))
-          .timeout(timeout);
-      return response.statusCode == 200;
-    } catch (_) {
+      final result = await _channel.invokeMethod<bool>('isAvailable');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('TTS: Native check failed: $e');
       return false;
     }
   }
 
-  /// Check if the server is responding and autostart bundled backend when needed.
+  /// Get model status
+  Future<Map<String, dynamic>> getModelStatus() async {
+    try {
+      final result = await _channel.invokeMethod<Map>('getModelStatus');
+      return Map<String, dynamic>.from(result ?? {});
+    } catch (e) {
+      debugPrint('TTS: Model status check failed: $e');
+      return {
+        'loaded': false,
+        'loading': false,
+        'available': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Check if server/native is healthy
   Future<bool> isServerHealthy({bool attemptAutoStart = true}) async {
-    if (await _checkServerHealth()) {
+    final nativeAvailable = await isNativeAvailable();
+    if (!nativeAvailable) {
+      debugPrint('TTS: Native TTS not available (requires macOS 15.0+)');
+      return false;
+    }
+
+    final status = await getModelStatus();
+    if (status['loaded'] == true) {
       return true;
     }
 
-    if (!attemptAutoStart) {
+    // Check if model is downloaded
+    final modelDir = await _getModelDirectory();
+    final modelFile = File(path.join(modelDir.path, 'kokoro-v1_0.safetensors'));
+
+    if (!modelFile.existsSync()) {
+      debugPrint('TTS: Model not downloaded yet');
+      _downloadStatus = ModelDownloadStatus.notDownloaded;
       return false;
     }
 
-    final started = await _backendService.ensureBackendRunning();
-    if (!started) {
+    // Try to load the model
+    try {
+      final loaded = await _channel.invokeMethod<bool>('loadModel');
+      return loaded ?? false;
+    } catch (e) {
+      debugPrint('TTS: Failed to load model: $e');
       return false;
     }
-
-    final deadline = DateTime.now().add(const Duration(seconds: 20));
-    while (DateTime.now().isBefore(deadline)) {
-      if (await _checkServerHealth(timeout: const Duration(seconds: 1))) {
-        return true;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-    }
-    return false;
   }
 
-  /// Get available voices from the server
+  /// Get the model directory path
+  Future<Directory> _getModelDirectory() async {
+    final home = Platform.environment['HOME'] ?? '/tmp';
+    final appSupport = Directory(
+      path.join(home, 'Library', 'Application Support', 'Mayari'),
+    );
+    final modelDir = Directory(path.join(appSupport.path, 'kokoro-model'));
+
+    if (!modelDir.existsSync()) {
+      modelDir.createSync(recursive: true);
+    }
+
+    return modelDir;
+  }
+
+  /// Check if model is downloaded
+  Future<bool> isModelDownloaded() async {
+    final modelDir = await _getModelDirectory();
+    final modelFile = File(path.join(modelDir.path, 'kokoro-v1_0.safetensors'));
+    final voicesFile = File(path.join(modelDir.path, 'voices.npz'));
+    return modelFile.existsSync() && voicesFile.existsSync();
+  }
+
+  /// Download the TTS model
+  Future<bool> downloadModel({
+    void Function(double progress)? onProgress,
+  }) async {
+    if (_downloadStatus == ModelDownloadStatus.downloading) {
+      return false;
+    }
+
+    _downloadStatus = ModelDownloadStatus.downloading;
+    _downloadProgressController.add(0.0);
+
+    try {
+      final modelDir = await _getModelDirectory();
+
+      // Download model file (~350MB)
+      debugPrint('TTS: Downloading model...');
+      final modelSuccess = await _downloadFile(
+        _modelUrl,
+        path.join(modelDir.path, 'kokoro-v1_0.safetensors'),
+        onProgress: (progress) {
+          final totalProgress = progress * 0.9; // Model is 90% of download
+          _downloadProgressController.add(totalProgress);
+          onProgress?.call(totalProgress);
+        },
+      );
+
+      if (!modelSuccess) {
+        _downloadStatus = ModelDownloadStatus.error;
+        return false;
+      }
+
+      // Download voices file (~5MB)
+      debugPrint('TTS: Downloading voices...');
+      final voicesSuccess = await _downloadFile(
+        _voicesUrl,
+        path.join(modelDir.path, 'voices.npz'),
+        onProgress: (progress) {
+          final totalProgress = 0.9 + (progress * 0.1); // Voices is 10%
+          _downloadProgressController.add(totalProgress);
+          onProgress?.call(totalProgress);
+        },
+      );
+
+      if (!voicesSuccess) {
+        _downloadStatus = ModelDownloadStatus.error;
+        return false;
+      }
+
+      _downloadStatus = ModelDownloadStatus.downloaded;
+      _downloadProgressController.add(1.0);
+      debugPrint('TTS: Model download complete');
+      return true;
+    } catch (e) {
+      debugPrint('TTS: Download failed: $e');
+      _downloadStatus = ModelDownloadStatus.error;
+      return false;
+    }
+  }
+
+  /// Download a file with progress
+  Future<bool> _downloadFile(
+    String url,
+    String savePath, {
+    void Function(double progress)? onProgress,
+  }) async {
+    try {
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(url));
+      final response = await client.send(request);
+
+      if (response.statusCode != 200) {
+        debugPrint('TTS: Download failed with status ${response.statusCode}');
+        return false;
+      }
+
+      final contentLength = response.contentLength ?? 0;
+      var downloadedBytes = 0;
+
+      final file = File(savePath);
+      final sink = file.openWrite();
+
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        downloadedBytes += chunk.length;
+
+        if (contentLength > 0) {
+          final progress = downloadedBytes / contentLength;
+          onProgress?.call(progress);
+        }
+      }
+
+      await sink.close();
+      client.close();
+
+      return true;
+    } catch (e) {
+      debugPrint('TTS: File download error: $e');
+      return false;
+    }
+  }
+
+  /// Get available voices
   Future<List<TtsVoice>> getVoices() async {
     try {
-      final response = await http
-          .get(Uri.parse('$_baseUrl/api/kokoro/voices'))
-          .timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final voiceList = data['voices'] as List;
-        return voiceList.map((v) => TtsVoice.fromJson(v)).toList();
+      final result = await _channel.invokeMethod<List>('getVoices');
+      if (result != null) {
+        return result
+            .map((v) => TtsVoice.fromJson(Map<String, dynamic>.from(v)))
+            .toList();
       }
     } catch (e) {
       debugPrint('TTS: Failed to fetch voices: $e');
@@ -147,57 +300,32 @@ class TtsService {
       'TTS: speak() called with ${text.length} chars, voice=$voice, speed=$speed',
     );
 
-    // Check if server is running
+    // Check if native is available and model loaded
     if (!await isServerHealthy(attemptAutoStart: true)) {
-      debugPrint(
-        'TTS Error: Mayari audio service is unavailable at $_baseUrl. '
-        'Status: ${_backendService.currentStatus}',
-      );
+      debugPrint('TTS Error: Native TTS not ready');
       return false;
     }
 
     try {
-      // Keep request payload bounded; backend will chunk for synthesis.
-      final truncatedText = text.length > 20000
-          ? text.substring(0, 20000)
-          : text;
+      // Keep text bounded
+      final truncatedText =
+          text.length > 20000 ? text.substring(0, 20000) : text;
+
       debugPrint('TTS: Sending synthesis request...');
 
-      // Request synthesis using new API
-      final response = await http
-          .post(
-            Uri.parse('$_baseUrl/api/kokoro/generate'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({
-              'text': truncatedText,
-              'voice': voice,
-              'speed': speed,
-              'smart_chunking': true,
-              'max_chars_per_chunk': 1500,
-              'crossfade_ms': 40,
-            }),
-          )
-          .timeout(const Duration(seconds: 120));
+      final result = await _channel.invokeMethod<bool>('speak', {
+        'text': truncatedText,
+        'voice': voice,
+        'speed': speed,
+      });
 
-      if (response.statusCode != 200) {
-        debugPrint(
-          'TTS Error: Synthesis failed with status ${response.statusCode}',
-        );
-        debugPrint('TTS Error: Response body: ${response.body}');
+      if (result == true) {
+        debugPrint('TTS: Playing audio...');
+        return true;
+      } else {
+        debugPrint('TTS Error: Synthesis returned false');
         return false;
       }
-
-      final data = json.decode(response.body);
-      final audioUrl = data['audio_url'] as String;
-      final fullUrl = '$_baseUrl$audioUrl';
-
-      debugPrint('TTS: Got audio URL: $fullUrl');
-
-      // Play the audio from URL
-      await _audioPlayer.setUrl(fullUrl);
-      await _audioPlayer.play();
-      debugPrint('TTS: Playing audio...');
-      return true;
     } catch (e) {
       debugPrint('TTS Error: Failed to synthesize/play: $e');
       return false;
@@ -206,21 +334,34 @@ class TtsService {
 
   /// Pause playback
   Future<void> pause() async {
-    await _audioPlayer.pause();
+    try {
+      await _channel.invokeMethod('pause');
+    } catch (e) {
+      debugPrint('TTS: Pause error: $e');
+    }
   }
 
   /// Resume playback
   Future<void> resume() async {
-    await _audioPlayer.play();
+    try {
+      await _channel.invokeMethod('resume');
+    } catch (e) {
+      debugPrint('TTS: Resume error: $e');
+    }
   }
 
   /// Stop playback
   Future<void> stop() async {
-    await _audioPlayer.stop();
+    try {
+      await _channel.invokeMethod('stop');
+    } catch (e) {
+      debugPrint('TTS: Stop error: $e');
+    }
   }
 
   /// Set playback speed
   Future<void> setSpeed(double speed) async {
+    // Speed is set during speak() call for native TTS
     await _audioPlayer.setSpeed(speed);
   }
 
@@ -230,37 +371,55 @@ class TtsService {
   }
 
   /// Check if currently playing
-  bool get isPlaying => _audioPlayer.playing;
+  bool get isPlaying {
+    // Check native player state
+    return _audioPlayer.playing;
+  }
 
-  /// Extract text from PDF bytes using the backend PDF extraction endpoint.
+  /// Check native playing state
+  Future<bool> isNativePlaying() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isPlaying');
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Extract text from PDF bytes using native macOS PDF APIs.
+  /// This is a lightweight extraction that doesn't require Python.
   Future<String> extractPdfText(
     Uint8List bytes, {
     String filename = 'document.pdf',
   }) async {
-    final safeFilename = filename.toLowerCase().endsWith('.pdf')
-        ? filename
-        : '$filename.pdf';
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse('$_baseUrl/api/pdf/extract-text'),
+    // For now, throw an error indicating this needs to be implemented
+    // or use a Flutter PDF plugin
+    throw UnimplementedError(
+      'PDF text extraction not yet implemented for native TTS mode. '
+      'Consider using a Flutter PDF plugin like syncfusion_flutter_pdf.',
     );
-    request.files.add(
-      http.MultipartFile.fromBytes('file', bytes, filename: safeFilename),
-    );
+  }
 
-    final streamed = await request.send().timeout(const Duration(seconds: 90));
-    final response = await http.Response.fromStream(streamed);
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      return (data['text'] as String?) ?? '';
+  /// Test TTS with 3 different voices, saves WAV files to /tmp/
+  Future<List<String>> testVoices() async {
+    try {
+      final result = await _channel.invokeMethod<List>('testVoices');
+      if (result != null) {
+        debugPrint('TTS Test: Generated ${result.length} audio files');
+        for (final path in result) {
+          debugPrint('TTS Test: $path');
+        }
+        return result.cast<String>();
+      }
+    } catch (e) {
+      debugPrint('TTS Test Error: $e');
     }
-    throw Exception(
-      'PDF extraction failed (${response.statusCode}): ${response.body}',
-    );
+    return [];
   }
 
   /// Dispose resources
   Future<void> dispose() async {
+    await _downloadProgressController.close();
     await _audioPlayer.dispose();
   }
 }

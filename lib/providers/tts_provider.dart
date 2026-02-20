@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
-import '../services/backend_service.dart';
 import '../services/log_service.dart';
 import '../services/tts_service.dart';
 
@@ -105,17 +104,33 @@ final ttsServiceProvider = Provider<TtsService>((ref) {
   return service;
 });
 
-/// Provider for backend startup/status messages.
-final backendStatusProvider = StreamProvider.autoDispose<String>((ref) {
-  final backend = BackendService();
-  final controller = StreamController<String>();
-  controller.add(backend.currentStatus);
-  final sub = backend.statusStream.listen(controller.add);
-  ref.onDispose(() {
-    sub.cancel();
-    controller.close();
-  });
-  return controller.stream;
+/// Provider for TTS status messages (native Swift TTS).
+final backendStatusProvider = StreamProvider.autoDispose<String>((ref) async* {
+  final service = ref.watch(ttsServiceProvider);
+
+  // Check native availability
+  final available = await service.isNativeAvailable();
+  if (!available) {
+    yield 'Native TTS requires macOS 15.0+';
+    return;
+  }
+
+  // Check if model is downloaded
+  final downloaded = await service.isModelDownloaded();
+  if (!downloaded) {
+    yield 'TTS model not downloaded';
+    return;
+  }
+
+  // Check if model is loaded
+  final status = await service.getModelStatus();
+  if (status['loaded'] == true) {
+    yield 'TTS ready';
+  } else if (status['loading'] == true) {
+    yield 'Loading TTS model...';
+  } else {
+    yield 'TTS idle';
+  }
 });
 
 /// Provider for TTS server status (checks periodically)
