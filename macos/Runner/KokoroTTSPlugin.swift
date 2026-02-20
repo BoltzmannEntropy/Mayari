@@ -119,7 +119,16 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
             let voice = args["voice"] as? String ?? "bf_emma"
             let speed = args["speed"] as? Double ?? 1.0
             let title = args["title"] as? String ?? "Audiobook"
-            generateAudiobook(chunks: chunks, voice: voice, speed: speed, title: title, outputPath: outputPath, result: result)
+            let requestId = args["requestId"] as? String ?? UUID().uuidString
+            generateAudiobook(
+                chunks: chunks,
+                voice: voice,
+                speed: speed,
+                title: title,
+                outputPath: outputPath,
+                requestId: requestId,
+                result: result
+            )
 
         case "extractPdfText":
             guard let args = call.arguments as? [String: Any],
@@ -346,7 +355,15 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
     }
 
     /// Generate a complete audiobook from text chunks
-    private func generateAudiobook(chunks: [String], voice: String, speed: Double, title: String, outputPath: String, result: @escaping FlutterResult) {
+    private func generateAudiobook(
+        chunks: [String],
+        voice: String,
+        speed: Double,
+        title: String,
+        outputPath: String,
+        requestId: String,
+        result: @escaping FlutterResult
+    ) {
         guard isModelLoaded, let engine = ttsEngine else {
             result(FlutterError(code: "NOT_LOADED", message: "Model not loaded", details: nil))
             return
@@ -371,6 +388,7 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
                 // Report progress
                 DispatchQueue.main.async {
                     self.methodChannel?.invokeMethod("audiobookProgress", arguments: [
+                        "requestId": requestId,
                         "current": index + 1,
                         "total": totalChunks,
                         "status": "Processing chunk \(index + 1) of \(totalChunks)"

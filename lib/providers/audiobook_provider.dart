@@ -411,6 +411,7 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
 
   List<String> _prepareChunksForGeneration(List<String> chunks) {
     const targetChunkChars = 180;
+    const maxChunks = 1200;
     final prepared = <String>[];
 
     for (final raw in chunks) {
@@ -462,7 +463,22 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
       }
     }
 
-    return prepared.where((c) => c.isNotEmpty).toList();
+    final deduped = <String>[];
+    String? previousNormalized;
+    for (final chunk in prepared) {
+      final normalized = chunk
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (normalized.isEmpty) continue;
+      if (normalized == previousNormalized) continue;
+      deduped.add(chunk.trim());
+      previousNormalized = normalized;
+      if (deduped.length >= maxChunks) break;
+    }
+
+    return deduped;
   }
 
   void _splitLongChunk(String chunk, int targetChunkChars, List<String> out) {

@@ -77,6 +77,8 @@ class TtsService {
   ModelDownloadStatus get downloadStatus => _downloadStatus;
   String? _lastAudiobookError;
   String? get lastAudiobookError => _lastAudiobookError;
+  String? _activeAudiobookRequestId;
+  bool _audiobookHandlerInstalled = false;
 
   /// Stream of player state changes
   Stream<PlayerState> get playerStateStream => _audioPlayer.playerStateStream;
@@ -472,38 +474,56 @@ class TtsService {
     double speed = 1.0,
   }) async {
     _lastAudiobookError = null;
+    final requestId = DateTime.now().microsecondsSinceEpoch.toString();
+    _activeAudiobookRequestId = requestId;
     if (!await isServerHealthy(attemptAutoStart: true)) {
       _lastAudiobookError = 'Native TTS not ready for audiobook generation';
       debugPrint('TTS Error: $_lastAudiobookError');
+      _activeAudiobookRequestId = null;
       return null;
     }
 
-    // Set up progress listener
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'audiobookProgress') {
+    if (!_audiobookHandlerInstalled) {
+      _channel.setMethodCallHandler((call) async {
+        if (call.method != 'audiobookProgress') return;
         final args = call.arguments as Map<dynamic, dynamic>;
+        final progressRequestId = args['requestId'] as String?;
+        if (_activeAudiobookRequestId != null &&
+            progressRequestId != null &&
+            progressRequestId != _activeAudiobookRequestId) {
+          return;
+        }
         _audiobookProgressController.add(
           AudiobookProgress(
             currentChunk: args['current'] as int,
             totalChunks: args['total'] as int,
             status: args['status'] as String,
+            requestId: progressRequestId,
           ),
         );
-      }
-    });
+      });
+      _audiobookHandlerInstalled = true;
+    }
 
     try {
       debugPrint(
         'TTS: Starting audiobook generation with ${chunks.length} chunks',
       );
 
-      final result = await _channel.invokeMethod<Map>('generateAudiobook', {
-        'chunks': chunks,
-        'outputPath': outputPath,
-        'title': title,
-        'voice': voice,
-        'speed': speed,
-      });
+      final result = await _channel
+          .invokeMethod<Map>('generateAudiobook', {
+            'chunks': chunks,
+            'outputPath': outputPath,
+            'title': title,
+            'voice': voice,
+            'speed': speed,
+            'requestId': requestId,
+          })
+          .timeout(
+            const Duration(minutes: 8),
+            onTimeout: () =>
+                throw TimeoutException('Audiobook generation timed out'),
+          );
 
       if (result != null) {
         return AudiobookResult(
@@ -519,6 +539,10 @@ class TtsService {
       debugPrint(
         'TTS Error: Audiobook generation failed: $_lastAudiobookError',
       );
+    } finally {
+      if (_activeAudiobookRequestId == requestId) {
+        _activeAudiobookRequestId = null;
+      }
     }
 
     return null;
@@ -537,11 +561,13 @@ class AudiobookProgress {
   final int currentChunk;
   final int totalChunks;
   final String status;
+  final String? requestId;
 
   AudiobookProgress({
     required this.currentChunk,
     required this.totalChunks,
     required this.status,
+    this.requestId,
   });
 
   double get progress => totalChunks > 0 ? currentChunk / totalChunks : 0;

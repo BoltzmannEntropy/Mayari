@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,6 +68,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
   int _activeReadAloudAnchorIndex = -1;
   int _pdfWordAnchorBuildId = 0;
   int _highlightRequestId = 0;
+  int _lastHighlightedGlobalWordIndex = -1;
   String? _wordAnchorSourcePath;
 
   @override
@@ -139,6 +141,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       ..clear()
       ..addAll(List<int>.filled(_globalWords.length, -1));
     _activeReadAloudAnchorIndex = -1;
+    _lastHighlightedGlobalWordIndex = -1;
     _pdfWordAnchorBuildId++;
     _clearReadAloudAnnotations();
   }
@@ -261,6 +264,109 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
     _activeReadAloudAnnotations.clear();
     _activeReadAloudAnchorIndex = -1;
+    _lastHighlightedGlobalWordIndex = -1;
+  }
+
+  int _firstAnchorIndexForPage(int pageNumber) {
+    if (_pdfWordAnchors.isEmpty) return -1;
+    for (int i = 0; i < _pdfWordAnchors.length; i++) {
+      if (_pdfWordAnchors[i].line.pageNumber >= pageNumber) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  int _findAnchorForward({
+    required String targetWord,
+    required int start,
+    required int end,
+    String? nextWord,
+  }) {
+    if (_pdfWordAnchors.isEmpty || start > end) return -1;
+    final clampedStart = math.max(0, start);
+    final clampedEnd = math.min(_pdfWordAnchors.length - 1, end);
+    if (clampedStart > clampedEnd) return -1;
+
+    for (int i = clampedStart; i <= clampedEnd; i++) {
+      if (_pdfWordAnchors[i].normalizedWord != targetWord) continue;
+      if (nextWord == null || nextWord.isEmpty) return i;
+      if (i + 1 < _pdfWordAnchors.length &&
+          _pdfWordAnchors[i + 1].normalizedWord == nextWord) {
+        return i;
+      }
+    }
+
+    for (int i = clampedStart; i <= clampedEnd; i++) {
+      if (_pdfWordAnchors[i].normalizedWord == targetWord) {
+        return i;
+      }
+    }
+
+    return -1;
+  }
+
+  int _resolvePdfAnchorIndex(int globalIndex) {
+    if (globalIndex < 0 || globalIndex >= _globalWords.length) return -1;
+    final targetWord = _globalWords[globalIndex];
+    final nextWord = globalIndex + 1 < _globalWords.length
+        ? _globalWords[globalIndex + 1]
+        : null;
+
+    final cached = _globalWordAnchorIndices[globalIndex];
+    if (cached >= 0 &&
+        cached < _pdfWordAnchors.length &&
+        _pdfWordAnchors[cached].normalizedWord == targetWord) {
+      return cached;
+    }
+
+    int searchStart = 0;
+    int searchEnd = _pdfWordAnchors.length - 1;
+
+    if (_activeReadAloudAnchorIndex >= 0) {
+      searchStart = math.max(0, _activeReadAloudAnchorIndex - 160);
+      searchEnd = math.min(
+        _pdfWordAnchors.length - 1,
+        _activeReadAloudAnchorIndex + 900,
+      );
+    } else {
+      final currentPage = ref.read(currentPageProvider);
+      final pageStart = _firstAnchorIndexForPage(currentPage);
+      if (pageStart >= 0) {
+        searchStart = pageStart;
+        searchEnd = math.min(_pdfWordAnchors.length - 1, pageStart + 2400);
+      }
+    }
+
+    int found = _findAnchorForward(
+      targetWord: targetWord,
+      nextWord: nextWord,
+      start: searchStart,
+      end: searchEnd,
+    );
+
+    if (found < 0 && _activeReadAloudAnchorIndex >= 0) {
+      found = _findAnchorForward(
+        targetWord: targetWord,
+        nextWord: nextWord,
+        start: _activeReadAloudAnchorIndex + 1,
+        end: _pdfWordAnchors.length - 1,
+      );
+    }
+
+    if (found < 0) {
+      found = _findAnchorForward(
+        targetWord: targetWord,
+        nextWord: nextWord,
+        start: 0,
+        end: _pdfWordAnchors.length - 1,
+      );
+    }
+
+    if (found >= 0 && globalIndex < _globalWordAnchorIndices.length) {
+      _globalWordAnchorIndices[globalIndex] = found;
+    }
+    return found;
   }
 
   bool _tryHighlightWithPdfWordAnchor(int globalIndex) {
@@ -270,11 +376,15 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       return false;
     }
 
+    if (globalIndex < _lastHighlightedGlobalWordIndex) {
+      _activeReadAloudAnchorIndex = -1;
+    }
+
     final indices = <int>[];
     for (int offset = 2; offset >= 0; offset--) {
       final idx = globalIndex - offset;
       if (idx < 0 || idx >= _globalWordAnchorIndices.length) continue;
-      final anchorIndex = _globalWordAnchorIndices[idx];
+      final anchorIndex = _resolvePdfAnchorIndex(idx);
       if (anchorIndex < 0 || anchorIndex >= _pdfWordAnchors.length) continue;
       indices.add(anchorIndex);
     }
@@ -302,6 +412,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       _activeReadAloudAnnotations.add(annotation);
     }
     _activeReadAloudAnchorIndex = currentAnchorIndex;
+    _lastHighlightedGlobalWordIndex = globalIndex;
 
     final currentAnchor = _pdfWordAnchors[currentAnchorIndex];
     if (controller.pageNumber != currentAnchor.line.pageNumber) {
