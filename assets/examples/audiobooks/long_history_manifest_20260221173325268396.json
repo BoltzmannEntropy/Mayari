@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-02-21T19:41:21.803471",
+  "text_asset": "assets/examples/texts/public_domain_history_wells_excerpt.txt",
+  "max_chars": 12000,
+  "voices": [
+    "bf_emma",
+    "bm_george"
+  ],
+  "chunk_count": 94,
+  "speed": 1.0,
+  "outputs": [
+    {
+      "voice": "bf_emma",
+      "path": "/Volumes/SSD4tb/Dropbox/DSS/artifacts/code/MayariPRJ/MayariCODE/assets/examples/audiobooks/long_history_bf_emma_20260221173325268396.wav",
+      "ok": true,
+      "size_bytes": 37264844,
+      "duration_seconds": 776.35,
+      "chunks": 94,
+      "error": null
+    },
+    {
+      "voice": "bm_george",
+      "path": "/Volumes/SSD4tb/Dropbox/DSS/artifacts/code/MayariPRJ/MayariCODE/assets/examples/audiobooks/long_history_bm_george_20260221173325268396.wav",
+      "ok": true,
+      "size_bytes": 42150044,
+      "duration_seconds": 878.125,
+      "chunks": 94,
+      "error": null
+    }
+  ]
+}

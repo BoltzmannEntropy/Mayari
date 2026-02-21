@@ -1,35 +1,41 @@
-# Mayari v1.0.4 Release Notes
+# Mayari v1.0.5 Release Notes
 
 **Release Date:** February 21, 2026
 
 ## Highlights
 
-- Added EPUB and DOCX read-aloud support alongside PDF.
-- Added bundled Examples with ready-made sample documents and audiobooks for PDF, DOCX, and EPUB.
-- Added voice cards and language cards with language-based voice filtering.
-- Added repository demo video (`assets/mayari-video.mov`) and replaced the MayariWEB hero image with the demo video.
+- Added long-form audiobook generation flow from public-domain history text.
+- Added reproducible long-text test runner with British Kokoro voices.
+- Synchronized website demo audio samples into app assets for exact sample parity between code and website.
+- Website now includes multilingual language demo cards with generated sample audio.
 
-## Read-Aloud and Audiobooks
+## Long-Form Audiobooks
 
-- Unified extraction pipeline now supports `.pdf`, `.docx`, and `.epub`.
-- Audiobook creation is available for extracted text across supported document formats.
-- Included non-placeholder example audiobook WAV files for all three sample formats.
+- Added bundled public-domain source text:
+  - `assets/examples/texts/public_domain_history_wells_excerpt.txt`
+- Added long audiobook runner:
+  - `tool/long_history_audiobook_runner.dart`
+  - `scripts/generate-long-history-audiobooks.sh`
+- Generated long audiobook examples in app assets:
+  - `long_history_bf_emma_*.wav`
+  - `long_history_bm_george_*.wav`
+  - `long_history_manifest_*.json`
 
-## Voice UX
+## Audio Sample Sync
 
-- Voice cards now expose language metadata in the UI.
-- Language cards allow selecting one or multiple languages to filter visible voices.
-- Added queue test action to pre-generate language test audiobook jobs.
+- Mirrored all website `sample-*.mp3` demos into:
+  - `assets/examples/audiobooks/`
+- Verified hash parity between `MayariWEB/audio` and `MayariCODE/assets/examples/audiobooks`.
 
 ## Validation
 
-- `dart analyze` reports no issues.
 - Full Flutter test suite passes.
-- Service tests validate document extraction (PDF/DOCX/EPUB), examples loading, and voice catalog behavior.
-- macOS debug and release builds complete successfully.
+- `dart analyze` passes on modified long-audiobook files.
+- macOS debug/release builds complete.
+- Long-form generation completed successfully for British voices.
 
 ## Distribution
 
-- **Version:** `1.0.4+5`
-- **Primary Artifact:** `Mayari-1.0.4.dmg`
+- **Version:** `1.0.5+6`
+- **Primary Artifact:** `Mayari-1.0.5.dmg`
 - **Platform:** macOS 15.0+ (Apple Silicon)
