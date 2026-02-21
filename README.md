@@ -1,6 +1,6 @@
 <div align="center">
   <h1>Mayari</h1>
-  <p><i>PDF quote extraction and read-aloud workspace for academic research</i></p>
+  <p><i>Native document read-aloud and audiobook workspace for PDF, DOCX, and EPUB on macOS</i></p>
   <p>
     <a href="https://boltzmannentropy.github.io/mayari-web/"><strong>Website</strong></a>
     ·
@@ -14,7 +14,7 @@
 
 Direct download: [`assets/mayari-video.mp4`](assets/mayari-video.mp4) · [`assets/mayari-video.mov`](assets/mayari-video.mov)
 
-Mayari is an Apple-platform app for collecting, organizing, and exporting quotes from research PDFs. It combines a PDF reader, quote manager, native text-to-speech, and a markdown text reader in one workspace.
+Mayari is a macOS app for reading PDF, DOCX, and EPUB files with native Kokoro text-to-speech, voice/language controls, and audiobook generation. It combines a document library, read-aloud tools, quote capture, and export workflows in one workspace.
 
 ## Highlights
 
