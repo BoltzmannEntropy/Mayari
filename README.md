@@ -10,11 +10,9 @@
 
 ## Demo Video
 
-<video controls preload="metadata" playsinline width="960">
-  <source src="assets/mayari-video.mp4" type="video/mp4">
-  <source src="assets/mayari-video.mov" type="video/quicktime">
-  Your browser does not support the demo video. Download it from <a href="assets/mayari-video.mov">assets/mayari-video.mov</a>.
-</video>
+[![Watch Mayari Demo](assets/mayari-demo-preview.gif)](assets/mayari-video.mp4)
+
+Direct download: [`assets/mayari-video.mp4`](assets/mayari-video.mp4) · [`assets/mayari-video.mov`](assets/mayari-video.mov)
 
 Mayari is an Apple-platform app for collecting, organizing, and exporting quotes from research PDFs. It combines a PDF reader, quote manager, native text-to-speech, and a markdown text reader in one workspace.
 
@@ -231,6 +229,10 @@ bash ./scripts/release-ios.sh --upload --dist testflight
 - Requires macOS 15.0+ and Apple Silicon
 - Quote capture needs selectable PDF text (no OCR)
 - British English voices only
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=BoltzmannEntropy/Mayari&type=Date)](https://www.star-history.com/#BoltzmannEntropy/Mayari&Date)
 
 ## License
 
