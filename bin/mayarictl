@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PID_DIR="$ROOT_DIR/.pids"
 LOG_DIR="$ROOT_DIR/.logs"
+APP_FILENAME_FILE="$ROOT_DIR/macos/Flutter/ephemeral/.app_filename"
 
 # Colors
 RED='\033[0;31m'
@@ -19,6 +20,69 @@ NC='\033[0m'
 mkdir -p "$PID_DIR" "$LOG_DIR"
 
 # ============== Flutter Functions ==============
+
+resolve_release_app_path() {
+    local release_dir="$ROOT_DIR/build/macos/Build/Products/Release"
+    local built_app_file=""
+
+    if [ -f "$APP_FILENAME_FILE" ]; then
+        built_app_file="$(tr -d '[:space:]' < "$APP_FILENAME_FILE")"
+    fi
+
+    if [ -n "$built_app_file" ] && [ -d "$release_dir/$built_app_file" ]; then
+        echo "$release_dir/$built_app_file"
+        return 0
+    fi
+
+    if [ -d "$release_dir/mayari_temp.app" ]; then
+        echo "$release_dir/mayari_temp.app"
+        return 0
+    fi
+
+    if [ -d "$release_dir/Mayari.app" ]; then
+        echo "$release_dir/Mayari.app"
+        return 0
+    fi
+
+    return 1
+}
+
+embed_swift_package_frameworks() {
+    local app_path="$1"
+    local package_frameworks_dir="$ROOT_DIR/build/macos/Build/Products/Release/PackageFrameworks"
+    local app_frameworks_dir="$app_path/Contents/Frameworks"
+
+    if [ ! -d "$package_frameworks_dir" ]; then
+        echo -e "${YELLOW}PackageFrameworks not found, skipping embed step${NC}"
+        return 0
+    fi
+
+    mkdir -p "$app_frameworks_dir"
+
+    local copied_count=0
+    for framework in "$package_frameworks_dir"/*.framework; do
+        [ -d "$framework" ] || continue
+        local framework_name
+        framework_name="$(basename "$framework")"
+        if [ ! -d "$app_frameworks_dir/$framework_name" ]; then
+            cp -R "$framework" "$app_frameworks_dir/"
+            copied_count=$((copied_count + 1))
+        fi
+    done
+
+    if [ "$copied_count" -gt 0 ]; then
+        echo "Embedded $copied_count Swift framework(s)"
+    fi
+
+    if [ ! -d "$app_frameworks_dir/KokoroSwift.framework" ]; then
+        echo -e "${RED}Missing KokoroSwift.framework after embed step${NC}"
+        return 1
+    fi
+}
+
+is_running() {
+    pgrep -f "mayari_temp.app/Contents/MacOS" >/dev/null 2>&1
+}
 
 start_flutter() {
     local mode="${1:-release}"
@@ -36,12 +100,13 @@ start_flutter() {
         flutter build macos --release
 
         # Launch app
-        local app_path="$ROOT_DIR/build/macos/Build/Products/Release/mayari_temp.app"
-        if [ -d "$app_path" ]; then
+        local app_path
+        if app_path="$(resolve_release_app_path)"; then
+            embed_swift_package_frameworks "$app_path"
             open "$app_path"
             echo -e "${GREEN}Mayari launched${NC}"
         else
-            echo -e "${YELLOW}App not found at $app_path, trying dev mode${NC}"
+            echo -e "${YELLOW}Release app not found, trying dev mode${NC}"
             flutter run -d macos &
             echo $! > "$PID_DIR/flutter.pid"
         fi
@@ -87,6 +152,10 @@ cmd_up() {
     done
 
     echo -e "${BLUE}=== Starting Mayari ===${NC}"
+    if is_running; then
+        echo "Mayari already running, restarting..."
+        stop_flutter
+    fi
     start_flutter "$flutter_mode"
     echo ""
     echo -e "${GREEN}=== Mayari Ready ===${NC}"
@@ -190,7 +259,7 @@ case "${1:-}" in
         ;;
     version)
         echo -e "${BLUE}Mayari - PDF Quote Extraction with Native TTS${NC}"
-        echo "Version: 1.0.0"
+        echo "Version: 1.0.2"
         echo "Root: $ROOT_DIR"
         echo ""
         echo "Components:"
