@@ -10,7 +10,9 @@
 
 ## Demo Video
 
-<video src="assets/mayari-video.mov" controls preload="metadata" playsinline width="960">
+<video controls preload="metadata" playsinline width="960">
+  <source src="assets/mayari-video.mp4" type="video/mp4">
+  <source src="assets/mayari-video.mov" type="video/quicktime">
   Your browser does not support the demo video. Download it from <a href="assets/mayari-video.mov">assets/mayari-video.mov</a>.
 </video>
 
