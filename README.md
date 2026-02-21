@@ -182,6 +182,40 @@ Outputs are written to:
 
 Then open the generated `.wav` files directly in Finder/QuickTime to listen.
 
+## Bundled Audio Samples
+
+All demo samples are bundled in `assets/examples/audiobooks/`.
+
+### British Voice Samples
+
+- `sample-emma.mp3`
+- `sample-isabella.mp3`
+- `sample-alice.mp3`
+- `sample-lily.mp3`
+- `sample-george.mp3`
+- `sample-fable.mp3`
+- `sample-lewis.mp3`
+- `sample-daniel.mp3`
+
+### Multilingual Samples
+
+- `sample-spanish-dora.mp3`
+- `sample-french-siwis.mp3`
+- `sample-hindi-alpha.mp3`
+- `sample-italian-sara.mp3`
+- `sample-japanese-nezumi.mp3`
+- `sample-portuguese-dora.mp3`
+- `sample-mandarin-xiaobei.mp3`
+
+### Example Audiobooks
+
+- `example_pdf_genesis.wav`
+- `example_docx_readaloud.wav`
+- `example_epub_readaloud.wav`
+- `long_history_bf_emma_20260221173325268396.wav`
+- `long_history_bm_george_20260221173325268396.wav`
+- `long_history_manifest_20260221173325268396.json`
+
 ## Export Format
 
 Quotes export as markdown:
