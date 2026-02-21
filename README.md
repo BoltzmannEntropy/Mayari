@@ -7,7 +7,7 @@
     <a href="https://github.com/BoltzmannEntropy/Mayari"><strong>GitHub</strong></a>
   </p>
   <p>
-    <a href="https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.4/Mayari-1.0.4.dmg">
+    <a href="https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.5/Mayari-1.0.5.dmg">
       <img alt="Download for OSX" src="https://img.shields.io/badge/Download%20for-OSX-7C3AED?style=for-the-badge&logo=apple&logoColor=white">
     </a>
   </p>
@@ -86,7 +86,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 
 ### From DMG (Recommended)
 
-1. Download `Mayari-1.0.4.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
+1. Download [`Mayari-1.0.5.dmg`](https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.5/Mayari-1.0.5.dmg)
 2. Open DMG and drag Mayari to Applications
 3. Right-click → Open (first launch only, for Gatekeeper)
 4. TTS model (~340MB) downloads automatically on first use
