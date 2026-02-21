@@ -319,6 +319,21 @@ class AudiobooksNotifier extends StateNotifier<List<Audiobook>> {
     await _saveAudiobooks();
   }
 
+  Future<void> importBundledExamples(List<Audiobook> books) async {
+    if (books.isEmpty) return;
+    final existingPaths = state.map((b) => b.path).toSet();
+    final additions = <Audiobook>[];
+    for (final book in books) {
+      if (existingPaths.contains(book.path)) continue;
+      if (!File(book.path).existsSync()) continue;
+      additions.add(book);
+      existingPaths.add(book.path);
+    }
+    if (additions.isEmpty) return;
+    state = [...additions, ...state]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    await _saveAudiobooks();
+  }
+
   Future<void> deleteAudiobook(String id) async {
     final book = state.firstWhere(
       (b) => b.id == id,
@@ -337,6 +352,47 @@ class AudiobooksNotifier extends StateNotifier<List<Audiobook>> {
 
   Future<void> refresh() async {
     await _loadAudiobooks();
+  }
+
+  /// Recover audiobooks from completed jobs that have files but no audiobook entry
+  Future<int> recoverFromJobs(List<AudiobookJob> jobs) async {
+    int recovered = 0;
+    final existingPaths = state.map((b) => b.path).toSet();
+
+    for (final job in jobs) {
+      if (job.status != AudiobookJobStatus.completed) continue;
+      if (job.resultPath == null) continue;
+      if (existingPaths.contains(job.resultPath)) continue;
+
+      final file = File(job.resultPath!);
+      if (!file.existsSync()) continue;
+
+      // Try to get duration from file size (approximate: ~176KB per second for WAV)
+      final fileSize = file.lengthSync();
+      final estimatedDuration = fileSize / 176400.0; // 44100 Hz * 2 bytes * 2 channels
+
+      final audiobook = Audiobook(
+        id: const Uuid().v4(),
+        title: job.title,
+        path: job.resultPath!,
+        durationSeconds: estimatedDuration,
+        chunks: job.totalChunks,
+        voice: job.voice,
+        speed: job.speed,
+        createdAt: job.finishedAt ?? job.createdAt,
+      );
+
+      state = [audiobook, ...state];
+      existingPaths.add(job.resultPath!);
+      recovered++;
+    }
+
+    if (recovered > 0) {
+      state.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      await _saveAudiobooks();
+    }
+
+    return recovered;
   }
 }
 
@@ -381,6 +437,14 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
 
       state = recovered;
       await _saveJobs();
+
+      // Recover any audiobooks from completed jobs that might be missing
+      final audiobooksNotifier = _ref.read(audiobooksProvider.notifier);
+      final recoveredCount = await audiobooksNotifier.recoverFromJobs(state);
+      if (recoveredCount > 0) {
+        debugPrint('Recovered $recoveredCount audiobooks from completed jobs');
+      }
+
       unawaited(_processQueue());
     } catch (e) {
       debugPrint('Error loading audiobook jobs: $e');
@@ -766,32 +830,46 @@ class AudiobookPlaybackNotifier extends StateNotifier<AudiobookPlaybackState> {
   AudiobookPlaybackNotifier() : super(const AudiobookPlaybackState()) {
     _player.playerStateStream.listen((playerState) {
       if (playerState.processingState == ProcessingState.completed) {
-        state = state.copyWith(isPlaying: false, isPaused: false);
+        // Reset full state when playback completes naturally
+        state = const AudiobookPlaybackState();
       }
     });
 
     _player.positionStream.listen((position) {
-      state = state.copyWith(position: position);
+      // Only update position if we have an active playback
+      if (state.playingId != null) {
+        state = state.copyWith(position: position);
+      }
     });
 
     _player.durationStream.listen((duration) {
-      if (duration != null) {
+      if (duration != null && state.playingId != null) {
         state = state.copyWith(duration: duration);
       }
     });
   }
 
   Future<void> play(Audiobook book) async {
+    debugPrint('AudiobookPlayback: play() called for "${book.title}" (id: ${book.id})');
     try {
+      // Stop any existing playback first to avoid stream conflicts
+      if (state.playingId != null) {
+        debugPrint('AudiobookPlayback: stopping previous playback');
+        await _player.stop();
+      }
+      debugPrint('AudiobookPlayback: setting file path: ${book.path}');
       await _player.setFilePath(book.path);
+      debugPrint('AudiobookPlayback: starting playback');
       await _player.play();
       state = AudiobookPlaybackState(
         playingId: book.id,
         isPlaying: true,
         isPaused: false,
       );
+      debugPrint('AudiobookPlayback: state updated - playingId=${state.playingId}, isPlaying=${state.isPlaying}');
     } catch (e) {
-      debugPrint('Error playing audiobook: $e');
+      debugPrint('AudiobookPlayback: Error playing audiobook: $e');
+      state = const AudiobookPlaybackState();
     }
   }
 
@@ -806,8 +884,10 @@ class AudiobookPlaybackNotifier extends StateNotifier<AudiobookPlaybackState> {
   }
 
   Future<void> stop() async {
+    debugPrint('AudiobookPlayback: stop() called, current state: playingId=${state.playingId}, isPlaying=${state.isPlaying}, isPaused=${state.isPaused}');
     await _player.stop();
     state = const AudiobookPlaybackState();
+    debugPrint('AudiobookPlayback: stop() complete, state reset');
   }
 
   Future<void> seek(Duration position) async {

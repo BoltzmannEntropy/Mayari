@@ -27,7 +27,9 @@ class SourceHeader extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: isActive
-              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5)
+              ? Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.5)
               : null,
           border: Border(
             bottom: BorderSide(color: Theme.of(context).dividerColor),
@@ -47,28 +49,36 @@ class SourceHeader extends StatelessWidget {
                   Text(
                     '"${source.title}"',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight:
-                              isActive ? FontWeight.bold : FontWeight.normal,
-                        ),
+                      fontWeight: isActive
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     '${source.author} (${source.year})',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey),
                   ),
                 ],
               ),
             ),
-            Text(
-              '${source.quotes.length}',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Colors.grey,
-                  ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                source.documentType.name.toUpperCase(),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: Colors.grey),
+              ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             if (!isActive)
               IconButton(
                 icon: const Icon(Icons.visibility, size: 18),

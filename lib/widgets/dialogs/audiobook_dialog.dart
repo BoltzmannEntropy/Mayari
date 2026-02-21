@@ -58,9 +58,16 @@ class _AudiobookDialogState extends ConsumerState<AudiobookDialog> {
 
     // Generate output path
     final docsDir = Platform.environment['HOME'] ?? '/tmp';
-    final sanitizedTitle = widget.title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final sanitizedTitle = widget.title
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .replaceAll(' ', '_');
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final outputPath = p.join(docsDir, 'Documents', 'Mayari Audiobooks', '${sanitizedTitle}_$timestamp.wav');
+    final outputPath = p.join(
+      docsDir,
+      'Documents',
+      'Mayari Audiobooks',
+      '${sanitizedTitle}_$timestamp.wav',
+    );
 
     // Create directory if needed
     final dir = Directory(p.dirname(outputPath));
@@ -164,7 +171,9 @@ class _AudiobookDialogState extends ConsumerState<AudiobookDialog> {
                 return Row(
                   children: [
                     Icon(
-                      currentVoice.gender == 'female' ? Icons.face_3 : Icons.face,
+                      currentVoice.gender == 'female'
+                          ? Icons.face_3
+                          : Icons.face,
                       size: 20,
                       color: theme.colorScheme.primary,
                     ),
@@ -176,7 +185,7 @@ class _AudiobookDialogState extends ConsumerState<AudiobookDialog> {
                 );
               },
               loading: () => const Text('Loading voice...'),
-              error: (_, __) => const Text('Voice error'),
+              error: (_, _) => const Text('Voice error'),
             ),
 
             const SizedBox(height: 24),
@@ -184,13 +193,12 @@ class _AudiobookDialogState extends ConsumerState<AudiobookDialog> {
             // Progress section
             if (_isGenerating || _result != null) ...[
               LinearProgressIndicator(
-                value: _result != null ? 1.0 : (_progress > 0 ? _progress : null),
+                value: _result != null
+                    ? 1.0
+                    : (_progress > 0 ? _progress : null),
               ),
               const SizedBox(height: 8),
-              Text(
-                _status,
-                style: theme.textTheme.bodySmall,
-              ),
+              Text(_status, style: theme.textTheme.bodySmall),
             ],
 
             // Result section
@@ -199,7 +207,9 @@ class _AudiobookDialogState extends ConsumerState<AudiobookDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.3,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -272,9 +282,6 @@ Future<void> showAudiobookDialog(
   return showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (context) => AudiobookDialog(
-      title: title,
-      textChunks: textChunks,
-    ),
+    builder: (context) => AudiobookDialog(title: title, textChunks: textChunks),
   );
 }

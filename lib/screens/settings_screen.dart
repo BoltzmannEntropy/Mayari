@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
 import '../providers/tts_provider.dart';
 import '../providers/model_download_provider.dart';
 import '../services/storage_service.dart';
@@ -299,21 +297,13 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
   bool _highlightCurrentParagraph = true;
   bool _isLoading = true;
   bool _isSaving = false;
-  bool _isPreviewPlaying = false;
   String? _modelDirectoryPath;
-  StreamSubscription<PlayerState>? _previewSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _loadModelPaths();
-  }
-
-  @override
-  void dispose() {
-    _previewSubscription?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -363,53 +353,12 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
     setState(() => _modelDirectoryPath = modelDir);
   }
 
-  Future<void> _previewVoice() async {
-    if (!mounted) return;
-
-    final modelStatus = ref.read(modelDownloadProvider);
-    if (!modelStatus.isReady) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please download the TTS model first'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isPreviewPlaying = true);
-
-    final service = ref.read(ttsServiceProvider);
-
-    _previewSubscription?.cancel();
-    _previewSubscription = service.playerStateStream.listen((playerState) {
-      if (playerState.processingState == ProcessingState.completed) {
-        if (mounted) {
-          setState(() => _isPreviewPlaying = false);
-        }
-        _previewSubscription?.cancel();
-      }
-    });
-
-    final success = await service.speak(
-      'Hello, this is a preview of the selected voice.',
-      voice: _selectedVoice,
-      speed: _selectedSpeed,
-    );
-
-    if (!success && mounted) {
-      setState(() => _isPreviewPlaying = false);
-      _previewSubscription?.cancel();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final voicesAsync = ref.watch(ttsVoicesProvider);
     final modelStatus = ref.watch(modelDownloadProvider);
 
     return SingleChildScrollView(
@@ -449,7 +398,7 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<double>(
-                        value: _selectedSpeed,
+                        initialValue: _selectedSpeed,
                         onChanged: (value) {
                           if (value != null) {
                             setState(() => _selectedSpeed = value);

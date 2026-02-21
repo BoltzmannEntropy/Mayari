@@ -78,10 +78,46 @@ embed_swift_package_frameworks() {
         echo -e "${RED}Missing KokoroSwift.framework after embed step${NC}"
         return 1
     fi
+
+    # Sign all embedded frameworks
+    echo "Signing embedded frameworks..."
+    for framework in "$app_frameworks_dir"/*.framework; do
+        [ -d "$framework" ] || continue
+        codesign --force --sign - --timestamp=none --generate-entitlement-der "$framework" 2>/dev/null || true
+    done
+
+    # Re-sign the main app after embedding frameworks
+    echo "Re-signing app bundle..."
+    codesign --force --sign - --timestamp=none --generate-entitlement-der --deep "$app_path" 2>/dev/null || true
 }
 
 is_running() {
     pgrep -f "mayari_temp.app/Contents/MacOS" >/dev/null 2>&1
+}
+
+sign_app_bundle() {
+    local app_path="$1"
+    local frameworks_dir="$app_path/Contents/Frameworks"
+
+    echo "Signing app bundle..."
+
+    # First sign all frameworks
+    if [ -d "$frameworks_dir" ]; then
+        for framework in "$frameworks_dir"/*.framework; do
+            [ -d "$framework" ] || continue
+            local name=$(basename "$framework")
+            echo "  Signing $name..."
+            codesign --force --sign - --timestamp=none "$framework" 2>/dev/null || {
+                echo -e "${YELLOW}Warning: Could not sign $name${NC}"
+            }
+        done
+    fi
+
+    # Then sign the main app
+    echo "  Signing main app..."
+    codesign --force --sign - --timestamp=none --deep "$app_path" 2>/dev/null || {
+        echo -e "${YELLOW}Warning: Could not sign app bundle${NC}"
+    }
 }
 
 start_flutter() {
@@ -97,12 +133,17 @@ start_flutter() {
     else
         # Build release
         echo "Building Mayari..."
-        flutter build macos --release
+        # Build with ad-hoc signing to avoid certificate issues
+        flutter build macos --release \
+            --dart-define=CODE_SIGN_IDENTITY="-" 2>&1 || {
+            echo -e "${YELLOW}Build had warnings, checking if app was created...${NC}"
+        }
 
         # Launch app
         local app_path
         if app_path="$(resolve_release_app_path)"; then
             embed_swift_package_frameworks "$app_path"
+            sign_app_bundle "$app_path"
             open "$app_path"
             echo -e "${GREEN}Mayari launched${NC}"
         else

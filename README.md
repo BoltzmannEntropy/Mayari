@@ -8,6 +8,12 @@
   </p>
 </div>
 
+## Demo Video
+
+<video src="assets/mayari-video.mov" controls preload="metadata" playsinline width="960">
+  Your browser does not support the demo video. Download it from <a href="assets/mayari-video.mov">assets/mayari-video.mov</a>.
+</video>
+
 Mayari is an Apple-platform app for collecting, organizing, and exporting quotes from research PDFs. It combines a PDF reader, quote manager, native text-to-speech, and a markdown text reader in one workspace.
 
 ## Highlights
@@ -75,7 +81,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 
 ### From DMG (Recommended)
 
-1. Download `Mayari-1.0.3.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
+1. Download `Mayari-1.0.4.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
 2. Open DMG and drag Mayari to Applications
 3. Right-click → Open (first launch only, for Gatekeeper)
 4. TTS model (~340MB) downloads automatically on first use

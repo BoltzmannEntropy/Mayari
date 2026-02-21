@@ -7,12 +7,13 @@ import MLX
 import MLXUtilsLibrary
 import MLXNN
 
-/// British voices available in Kokoro
+/// Kokoro voice metadata for UI and language routing.
 struct KokoroVoice {
     let id: String
     let name: String
     let gender: String
     let grade: String
+    let language: Language
     let isDefault: Bool
 
     func toDictionary() -> [String: Any] {
@@ -21,21 +22,43 @@ struct KokoroVoice {
             "name": name,
             "gender": gender,
             "grade": grade,
+            "language_code": language.rawValue,
+            "language_name": language == .enUS ? "English (US)" : "English (UK)",
             "is_default": isDefault
         ]
     }
 }
 
-/// Available British voices
-let britishVoices: [KokoroVoice] = [
-    KokoroVoice(id: "bf_emma", name: "Emma", gender: "female", grade: "B-", isDefault: true),
-    KokoroVoice(id: "bf_isabella", name: "Isabella", gender: "female", grade: "C", isDefault: false),
-    KokoroVoice(id: "bf_alice", name: "Alice", gender: "female", grade: "D", isDefault: false),
-    KokoroVoice(id: "bf_lily", name: "Lily", gender: "female", grade: "D", isDefault: false),
-    KokoroVoice(id: "bm_george", name: "George", gender: "male", grade: "C", isDefault: false),
-    KokoroVoice(id: "bm_fable", name: "Fable", gender: "male", grade: "C", isDefault: false),
-    KokoroVoice(id: "bm_lewis", name: "Lewis", gender: "male", grade: "D+", isDefault: false),
-    KokoroVoice(id: "bm_daniel", name: "Daniel", gender: "male", grade: "D", isDefault: false),
+/// Available Kokoro English voices from voices.npz.
+let kokoroVoices: [KokoroVoice] = [
+    KokoroVoice(id: "af_alloy", name: "Alloy", gender: "female", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_aoede", name: "Aoede", gender: "female", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_bella", name: "Bella", gender: "female", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_heart", name: "Heart", gender: "female", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_jessica", name: "Jessica", gender: "female", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_kore", name: "Kore", gender: "female", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_nicole", name: "Nicole", gender: "female", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_nova", name: "Nova", gender: "female", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_river", name: "River", gender: "female", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_sarah", name: "Sarah", gender: "female", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "af_sky", name: "Sky", gender: "female", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_adam", name: "Adam", gender: "male", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_echo", name: "Echo", gender: "male", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_eric", name: "Eric", gender: "male", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_fenrir", name: "Fenrir", gender: "male", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_liam", name: "Liam", gender: "male", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_michael", name: "Michael", gender: "male", grade: "B", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_onyx", name: "Onyx", gender: "male", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_puck", name: "Puck", gender: "male", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "am_santa", name: "Santa", gender: "male", grade: "C", language: .enUS, isDefault: false),
+    KokoroVoice(id: "bf_emma", name: "Emma", gender: "female", grade: "B-", language: .enGB, isDefault: true),
+    KokoroVoice(id: "bf_isabella", name: "Isabella", gender: "female", grade: "C", language: .enGB, isDefault: false),
+    KokoroVoice(id: "bf_alice", name: "Alice", gender: "female", grade: "D", language: .enGB, isDefault: false),
+    KokoroVoice(id: "bf_lily", name: "Lily", gender: "female", grade: "D", language: .enGB, isDefault: false),
+    KokoroVoice(id: "bm_george", name: "George", gender: "male", grade: "C", language: .enGB, isDefault: false),
+    KokoroVoice(id: "bm_fable", name: "Fable", gender: "male", grade: "C", language: .enGB, isDefault: false),
+    KokoroVoice(id: "bm_lewis", name: "Lewis", gender: "male", grade: "D+", language: .enGB, isDefault: false),
+    KokoroVoice(id: "bm_daniel", name: "Daniel", gender: "male", grade: "D", language: .enGB, isDefault: false),
 ]
 
 /// TTS Plugin for Flutter using KokoroSwift
@@ -49,6 +72,13 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
     private var voiceEmbeddings: [String: MLXArray] = [:]
     private var isModelLoaded = false
     private var isLoading = false
+
+    private func languageForVoiceId(_ voiceId: String) -> Language {
+        if let voice = kokoroVoices.first(where: { $0.id == voiceId }) {
+            return voice.language
+        }
+        return .enGB
+    }
 
     static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
@@ -145,7 +175,7 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
     }
 
     private func getVoices() -> [[String: Any]] {
-        return britishVoices.map { $0.toDictionary() }
+        return kokoroVoices.map { $0.toDictionary() }
     }
 
     private func getModelDirectory() -> URL {
@@ -198,7 +228,7 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
             if FileManager.default.fileExists(atPath: voicesPath.path) {
                 print("[KokoroTTS] Loading voice embeddings from: \(voicesPath.path)")
                 if let voiceData = NpyzReader.read(fileFromPath: voicesPath) {
-                    for voice in britishVoices {
+                    for voice in kokoroVoices {
                         // NPZ entries have .npy extension in their keys
                         let key = "\(voice.id).npy"
                         if let embedding = voiceData[key] {
@@ -238,13 +268,14 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
                     }
                     return
                 }
+                let language = self.languageForVoiceId(voice)
 
                 print("[KokoroTTS] Generating audio for: \(text.prefix(50))...")
 
                 // Generate audio using KokoroSwift - returns ([Float], [MToken]?)
                 let (audioSamples, _) = try engine.generateAudio(
                     voice: voiceEmbedding,
-                    language: .enGB,
+                    language: language,
                     text: text,
                     speed: Float(speed)
                 )
@@ -291,7 +322,7 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
             ttsEngine = KokoroTTS(modelPath: modelPath, g2p: .misaki)
 
             if let voiceData = NpyzReader.read(fileFromPath: voicesPath) {
-                for voice in britishVoices {
+                for voice in kokoroVoices {
                     let key = "\(voice.id).npy"
                     if let embedding = voiceData[key] {
                         voiceEmbeddings[voice.id] = embedding
@@ -311,7 +342,7 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
             guard let self = self else { return }
 
             let testText = "Hello! This is a test of the Kokoro text to speech engine running natively on macOS with no Python required."
-            let testVoices = ["bf_emma", "bm_george", "bf_isabella"]
+            let testVoices = ["bf_emma", "af_heart", "am_liam"]
             var outputFiles: [String] = []
 
             for voiceId in testVoices {
@@ -323,10 +354,11 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
                 do {
                     print("[KokoroTTS] Generating audio with voice: \(voiceId)")
                     let startTime = Date()
+                    let language = self.languageForVoiceId(voiceId)
 
                     let (audioSamples, _) = try engine.generateAudio(
                         voice: voiceEmbedding,
-                        language: .enGB,
+                        language: language,
                         text: testText,
                         speed: 1.0
                     )
@@ -373,6 +405,7 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
             result(FlutterError(code: "VOICE_ERROR", message: "Voice not found", details: nil))
             return
         }
+        let language = languageForVoiceId(voice)
 
         audioQueue.async { [weak self] in
             guard let self = self else { return }
@@ -400,7 +433,7 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
 
                     let (audioSamples, _) = try engine.generateAudio(
                         voice: voiceEmbedding,
-                        language: .enGB,
+                        language: language,
                         text: trimmedChunk,
                         speed: Float(speed)
                     )

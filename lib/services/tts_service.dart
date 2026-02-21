@@ -6,12 +6,35 @@ import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as path;
 
-/// Voice metadata for Kokoro British voices
+String _inferLanguageCodeFromVoiceId(String voiceId) {
+  if (voiceId.startsWith('af_') || voiceId.startsWith('am_')) {
+    return 'en-us';
+  }
+  if (voiceId.startsWith('bf_') || voiceId.startsWith('bm_')) {
+    return 'en-gb';
+  }
+  return 'en-gb';
+}
+
+String _languageNameForCode(String code) {
+  switch (code.toLowerCase()) {
+    case 'en-us':
+      return 'English (US)';
+    case 'en-gb':
+      return 'English (UK)';
+    default:
+      return code;
+  }
+}
+
+/// Voice metadata for Kokoro voices.
 class TtsVoice {
   final String id;
   final String name;
   final String gender;
   final String grade;
+  final String languageCode;
+  final String languageName;
   final bool isDefault;
 
   const TtsVoice({
@@ -19,15 +42,24 @@ class TtsVoice {
     required this.name,
     required this.gender,
     required this.grade,
+    required this.languageCode,
+    required this.languageName,
     this.isDefault = false,
   });
 
   factory TtsVoice.fromJson(Map<String, dynamic> json) {
+    final id = json['code'] as String;
+    final languageCode =
+        (json['language_code'] as String?) ?? _inferLanguageCodeFromVoiceId(id);
     return TtsVoice(
-      id: json['code'] as String,
+      id: id,
       name: json['name'] as String,
       gender: json['gender'] as String,
       grade: json['grade'] as String,
+      languageCode: languageCode,
+      languageName:
+          (json['language_name'] as String?) ??
+          _languageNameForCode(languageCode),
       isDefault: json['is_default'] as bool? ?? false,
     );
   }
@@ -35,22 +67,233 @@ class TtsVoice {
   String get displayName => '$name ($grade)';
 }
 
-/// Available British voices (fallback if native unavailable)
+/// Available Kokoro voices (fallback if native unavailable).
 const List<TtsVoice> defaultVoices = [
+  TtsVoice(
+    id: 'af_alloy',
+    name: 'Alloy',
+    gender: 'female',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_aoede',
+    name: 'Aoede',
+    gender: 'female',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_bella',
+    name: 'Bella',
+    gender: 'female',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_heart',
+    name: 'Heart',
+    gender: 'female',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_jessica',
+    name: 'Jessica',
+    gender: 'female',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_kore',
+    name: 'Kore',
+    gender: 'female',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_nicole',
+    name: 'Nicole',
+    gender: 'female',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_nova',
+    name: 'Nova',
+    gender: 'female',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_river',
+    name: 'River',
+    gender: 'female',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_sarah',
+    name: 'Sarah',
+    gender: 'female',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'af_sky',
+    name: 'Sky',
+    gender: 'female',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_adam',
+    name: 'Adam',
+    gender: 'male',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_echo',
+    name: 'Echo',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_eric',
+    name: 'Eric',
+    gender: 'male',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_fenrir',
+    name: 'Fenrir',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_liam',
+    name: 'Liam',
+    gender: 'male',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_michael',
+    name: 'Michael',
+    gender: 'male',
+    grade: 'B',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_onyx',
+    name: 'Onyx',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_puck',
+    name: 'Puck',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
+  TtsVoice(
+    id: 'am_santa',
+    name: 'Santa',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-us',
+    languageName: 'English (US)',
+  ),
   TtsVoice(
     id: 'bf_emma',
     name: 'Emma',
     gender: 'female',
     grade: 'B-',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
     isDefault: true,
   ),
-  TtsVoice(id: 'bf_isabella', name: 'Isabella', gender: 'female', grade: 'C'),
-  TtsVoice(id: 'bf_alice', name: 'Alice', gender: 'female', grade: 'D'),
-  TtsVoice(id: 'bf_lily', name: 'Lily', gender: 'female', grade: 'D'),
-  TtsVoice(id: 'bm_george', name: 'George', gender: 'male', grade: 'C'),
-  TtsVoice(id: 'bm_fable', name: 'Fable', gender: 'male', grade: 'C'),
-  TtsVoice(id: 'bm_lewis', name: 'Lewis', gender: 'male', grade: 'D+'),
-  TtsVoice(id: 'bm_daniel', name: 'Daniel', gender: 'male', grade: 'D'),
+  TtsVoice(
+    id: 'bf_isabella',
+    name: 'Isabella',
+    gender: 'female',
+    grade: 'C',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
+  TtsVoice(
+    id: 'bf_alice',
+    name: 'Alice',
+    gender: 'female',
+    grade: 'D',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
+  TtsVoice(
+    id: 'bf_lily',
+    name: 'Lily',
+    gender: 'female',
+    grade: 'D',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
+  TtsVoice(
+    id: 'bm_george',
+    name: 'George',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
+  TtsVoice(
+    id: 'bm_fable',
+    name: 'Fable',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
+  TtsVoice(
+    id: 'bm_lewis',
+    name: 'Lewis',
+    gender: 'male',
+    grade: 'D+',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
+  TtsVoice(
+    id: 'bm_daniel',
+    name: 'Daniel',
+    gender: 'male',
+    grade: 'D',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
 ];
 
 /// Model download status

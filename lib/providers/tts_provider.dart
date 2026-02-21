@@ -191,6 +191,11 @@ final ttsVoicesProvider = FutureProvider<List<TtsVoice>>((ref) async {
   return service.getVoices();
 });
 
+/// Selected language filters for voice cards. Empty means all languages.
+final selectedVoiceLanguageCodesProvider = StateProvider<Set<String>>((ref) {
+  return <String>{};
+});
+
 /// Notifier for TTS state management
 class TtsNotifier extends StateNotifier<TtsState> {
   final TtsService _service;

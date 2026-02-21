@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../providers/audiobook_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../services/tts_service.dart';
 
-/// Speaker card widget for voice selection - compact version
 class SpeakerCard extends StatelessWidget {
-  final TtsVoice voice;
-  final bool isSelected;
-  final VoidCallback onTap;
-
   const SpeakerCard({
     super.key,
     required this.voice,
@@ -16,16 +13,19 @@ class SpeakerCard extends StatelessWidget {
     required this.onTap,
   });
 
-  Color get _genderColor {
-    return voice.gender == 'female' ? Colors.pink : Colors.blue;
-  }
+  final TtsVoice voice;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  Color get _genderColor =>
+      voice.gender == 'female' ? Colors.pink : Colors.blue;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 90,
+        width: 118,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: isSelected
@@ -45,7 +45,6 @@ class SpeakerCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Name with gender indicator
             Row(
               children: [
                 Container(
@@ -73,9 +72,8 @@ class SpeakerCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 2),
-            // Grade/quality
             Text(
-              voice.grade,
+              '${voice.languageName} • ${voice.grade}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey[500],
                 fontSize: 9,
@@ -89,23 +87,153 @@ class SpeakerCard extends StatelessWidget {
   }
 }
 
-/// Panel showing all speaker cards in a single scrollable row
+class _LanguageCard extends StatelessWidget {
+  const _LanguageCard({
+    required this.label,
+    required this.count,
+    required this.isSelected,
+    required this.onTap,
+    required this.isAll,
+  });
+
+  final String label;
+  final int count;
+  final bool isSelected;
+  final bool isAll;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: isSelected
+              ? Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.7)
+              : Theme.of(context).colorScheme.surface,
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).dividerColor,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isAll ? Icons.language : Icons.translate,
+              size: 12,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '$label ($count)',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class SpeakerCardsPanel extends ConsumerWidget {
   const SpeakerCardsPanel({super.key});
+
+  Future<void> _queueLanguageTests(
+    BuildContext context,
+    WidgetRef ref,
+    List<TtsVoice> voices,
+    Set<String> selectedLanguages,
+  ) async {
+    if (voices.isEmpty) return;
+    final ttsState = ref.read(ttsProvider);
+    final filteredVoices = selectedLanguages.isEmpty
+        ? voices
+        : voices
+              .where((v) => selectedLanguages.contains(v.languageCode))
+              .toList();
+    if (filteredVoices.isEmpty) return;
+
+    TtsVoice pickVoice(String preferredLanguage, int fallbackIndex) {
+      final byLanguage = filteredVoices
+          .where((voice) => voice.languageCode == preferredLanguage)
+          .toList();
+      if (byLanguage.isNotEmpty) return byLanguage.first;
+      return filteredVoices[fallbackIndex % filteredVoices.length];
+    }
+
+    final jobs = ref.read(audiobookJobsProvider.notifier);
+    final germanVoice = pickVoice('en-us', 0);
+    final russianVoice = pickVoice('en-gb', 1);
+
+    await jobs.enqueue(
+      title: 'Language Test - German Sample',
+      chunks: const [
+        'Guten Tag! Dies ist ein kurzer deutscher Beispielsatz, um die Stimme im Testlauf zu pruefen.',
+      ],
+      voice: germanVoice.id,
+      speed: ttsState.speed,
+    );
+    await jobs.enqueue(
+      title: 'Language Test - Russian Sample',
+      chunks: const [
+        'Privet! Eto korotkaya russkaya testovaya fraza dlya proverki golosa v ocheredi zadach.',
+      ],
+      voice: russianVoice.id,
+      speed: ttsState.speed,
+    );
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Queued language test jobs: German and Russian samples.',
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final voicesAsync = ref.watch(ttsVoicesProvider);
     final ttsState = ref.watch(ttsProvider);
     final ttsNotifier = ref.read(ttsProvider.notifier);
+    final selectedLanguageCodes = ref.watch(selectedVoiceLanguageCodesProvider);
 
     return voicesAsync.when(
       data: (voices) {
-        // Sort: females first, then males
         final sortedVoices = [
           ...voices.where((v) => v.gender == 'female'),
           ...voices.where((v) => v.gender == 'male'),
         ];
+
+        final languageCounts = <String, int>{};
+        final languageLabels = <String, String>{};
+        for (final voice in sortedVoices) {
+          languageCounts[voice.languageCode] =
+              (languageCounts[voice.languageCode] ?? 0) + 1;
+          languageLabels[voice.languageCode] = voice.languageName;
+        }
+
+        final filteredVoices = selectedLanguageCodes.isEmpty
+            ? sortedVoices
+            : sortedVoices
+                  .where((v) => selectedLanguageCodes.contains(v.languageCode))
+                  .toList();
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -115,20 +243,97 @@ class SpeakerCardsPanel extends ConsumerWidget {
               bottom: BorderSide(color: Theme.of(context).dividerColor),
             ),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: sortedVoices.map((voice) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: SpeakerCard(
-                    voice: voice,
-                    isSelected: voice.id == ttsState.currentVoice,
-                    onTap: () => ttsNotifier.setVoice(voice.id),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: _LanguageCard(
+                              label: 'All',
+                              count: sortedVoices.length,
+                              isSelected: selectedLanguageCodes.isEmpty,
+                              isAll: true,
+                              onTap: () =>
+                                  ref
+                                          .read(
+                                            selectedVoiceLanguageCodesProvider
+                                                .notifier,
+                                          )
+                                          .state =
+                                      <String>{},
+                            ),
+                          ),
+                          ...languageCounts.entries.map((entry) {
+                            final code = entry.key;
+                            final selected = selectedLanguageCodes.contains(
+                              code,
+                            );
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: _LanguageCard(
+                                label: languageLabels[code] ?? code,
+                                count: entry.value,
+                                isSelected: selected,
+                                isAll: false,
+                                onTap: () {
+                                  final next = {...selectedLanguageCodes};
+                                  if (selected) {
+                                    next.remove(code);
+                                  } else {
+                                    next.add(code);
+                                  }
+                                  ref
+                                          .read(
+                                            selectedVoiceLanguageCodesProvider
+                                                .notifier,
+                                          )
+                                          .state =
+                                      next;
+                                },
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
                   ),
-                );
-              }).toList(),
-            ),
+                  IconButton(
+                    icon: const Icon(Icons.science_outlined, size: 16),
+                    tooltip: 'Queue German/Russian test jobs',
+                    onPressed: () => _queueLanguageTests(
+                      context,
+                      ref,
+                      sortedVoices,
+                      selectedLanguageCodes,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: filteredVoices.map((voice) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: SpeakerCard(
+                        voice: voice,
+                        isSelected: voice.id == ttsState.currentVoice,
+                        onTap: () => ttsNotifier.setVoice(voice.id),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -156,7 +361,6 @@ class SpeakerCardsPanel extends ConsumerWidget {
   }
 }
 
-/// Collapsible speaker cards panel - compact header
 class CollapsibleSpeakerCards extends ConsumerStatefulWidget {
   const CollapsibleSpeakerCards({super.key});
 
@@ -174,7 +378,6 @@ class _CollapsibleSpeakerCardsState
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Toggle header - compact
         InkWell(
           onTap: () => setState(() => _isExpanded = !_isExpanded),
           child: Container(
@@ -191,13 +394,12 @@ class _CollapsibleSpeakerCardsState
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Voice',
+                  'Voices',
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const Spacer(),
-                // Show current voice when collapsed
                 if (!_isExpanded) ...[
                   Consumer(
                     builder: (context, ref, _) {
@@ -205,12 +407,13 @@ class _CollapsibleSpeakerCardsState
                       final voicesAsync = ref.watch(ttsVoicesProvider);
                       return voicesAsync.when(
                         data: (voices) {
+                          if (voices.isEmpty) return const SizedBox.shrink();
                           final currentVoice = voices.firstWhere(
                             (v) => v.id == ttsState.currentVoice,
                             orElse: () => voices.first,
                           );
                           return Text(
-                            currentVoice.name,
+                            '${currentVoice.name} • ${currentVoice.languageName}',
                             style: Theme.of(context).textTheme.bodySmall,
                           );
                         },
@@ -229,7 +432,6 @@ class _CollapsibleSpeakerCardsState
             ),
           ),
         ),
-        // Cards panel
         if (_isExpanded) const SpeakerCardsPanel(),
       ],
     );

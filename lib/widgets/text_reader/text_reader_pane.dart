@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/text_reader_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../providers/model_download_provider.dart';
+import '../../providers/audiobook_provider.dart';
 import '../dialogs/model_download_dialog.dart';
 import '../tts/speaker_cards.dart';
 import '../tts/tts_reading_indicator.dart';
@@ -90,6 +91,47 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
     ttsNotifier.play();
   }
 
+  Future<void> _handleCreateAudiobook() async {
+    final textState = ref.read(textReaderProvider);
+    final ttsState = ref.read(ttsProvider);
+    final chunks = textState.paragraphs
+        .where((p) => p.trim().length > 8)
+        .toList();
+    if (chunks.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No text chunks found for audiobook generation'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final title = textState.loadedDocumentTitle?.trim().isNotEmpty == true
+        ? textState.loadedDocumentTitle!
+        : 'Text Reader Audiobook';
+
+    await ref
+        .read(audiobookJobsProvider.notifier)
+        .enqueue(
+          title: title,
+          chunks: chunks,
+          voice: ttsState.currentVoice,
+          speed: ttsState.speed,
+        );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Audiobook job queued (${chunks.length} chunks). Track it in Jobs.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final textState = ref.watch(textReaderProvider);
@@ -114,9 +156,13 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
               const Divider(height: 1),
               // Content area
               Expanded(
-                child: textState.isEditMode
-                    ? _buildEditMode(context, textState)
-                    : _buildViewMode(context, textState),
+                child: textState.isLoadingDocument
+                    ? const Center(child: CircularProgressIndicator())
+                    : (textState.documentError != null
+                          ? _buildErrorState(context, textState.documentError!)
+                          : (textState.isEditMode
+                                ? _buildEditMode(context, textState)
+                                : _buildViewMode(context, textState))),
               ),
             ],
           ),
@@ -200,6 +246,22 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
               ),
             ),
             _buildSpeedSlider(ttsState, ttsNotifier),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: (!modelStatus.isReady || textState.paragraphs.isEmpty)
+                  ? null
+                  : _handleCreateAudiobook,
+              icon: const Icon(Icons.audiotrack, size: 16),
+              label: const Text('Create Audiobook'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+            ),
           ],
         ),
       ),
@@ -343,7 +405,7 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
           ),
           const SizedBox(width: 8),
           Text(
-            'Text Reader',
+            textState.loadedDocumentTitle ?? 'Text Reader',
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w600,
             ),
@@ -479,6 +541,34 @@ class _TextReaderPaneState extends ConsumerState<TextReaderPane> {
             fontFamily: 'monospace',
             backgroundColor: theme.colorScheme.surfaceContainerHighest,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context, String error) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, color: theme.colorScheme.error, size: 36),
+            const SizedBox(height: 8),
+            Text(
+              'Failed to load document',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ),
       ),
     );

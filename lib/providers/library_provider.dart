@@ -1,11 +1,14 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-const _defaultPdfFolderEnv = 'MAYARI_DEFAULT_PDF_LIBRARY';
+import '../services/document_format.dart';
 
-bool _isReadablePdfFile(String filePath) {
+const _defaultLibraryEnv = 'MAYARI_DEFAULT_PDF_LIBRARY';
+
+bool _isReadableDocumentFile(String filePath) {
   final file = File(filePath);
   if (!file.existsSync()) return false;
   try {
@@ -17,34 +20,31 @@ bool _isReadablePdfFile(String filePath) {
   }
 }
 
-bool _directoryHasPdf(String path) {
+bool _directoryHasSupportedDocuments(String path) {
   final dir = Directory(path);
   if (!dir.existsSync()) return false;
   try {
     return dir.listSync().any(
       (f) =>
           f is File &&
-          p.extension(f.path).toLowerCase() == '.pdf' &&
-          _isReadablePdfFile(f.path),
+          isSupportedDocumentPath(f.path) &&
+          _isReadableDocumentFile(f.path),
     );
   } catch (_) {
     return false;
   }
 }
 
-/// Find the bundled PDF folder
-String? _findBundledPdfFolder() {
+String? _findBundledLibraryFolder() {
   if (kIsWeb) return null;
 
   final candidates = <String>[];
 
   if (Platform.isMacOS) {
-    // macOS app bundle: Contents/Resources/pdf/
     final executable = Platform.resolvedExecutable;
     final contentsDir = p.dirname(p.dirname(executable));
     candidates.add(p.join(contentsDir, 'Resources', 'pdf'));
 
-    // Development mode: project pdf/ folder
     var dir = Directory(p.dirname(executable));
     for (var i = 0; i < 10; i++) {
       candidates.add(p.join(dir.path, 'pdf'));
@@ -53,8 +53,8 @@ String? _findBundledPdfFolder() {
   }
 
   for (final path in candidates) {
-    if (_directoryHasPdf(path)) {
-      debugPrint('Found bundled PDF folder: $path');
+    if (_directoryHasSupportedDocuments(path)) {
+      debugPrint('Found bundled document library: $path');
       return path;
     }
   }
@@ -63,35 +63,37 @@ String? _findBundledPdfFolder() {
 }
 
 final libraryFolderProvider = StateProvider<String?>((ref) {
-  // First check environment variable
-  final configuredFolder = Platform.environment[_defaultPdfFolderEnv];
+  final configuredFolder = Platform.environment[_defaultLibraryEnv];
   if (configuredFolder != null &&
       configuredFolder.trim().isNotEmpty &&
-      _directoryHasPdf(configuredFolder.trim())) {
+      _directoryHasSupportedDocuments(configuredFolder.trim())) {
     return configuredFolder.trim();
   }
-
-  // Then try to find bundled PDF folder
-  return _findBundledPdfFolder();
+  return _findBundledLibraryFolder();
 });
 
-final pdfFilesProvider = Provider<List<FileSystemEntity>>((ref) {
+final libraryFilesProvider = Provider<List<FileSystemEntity>>((ref) {
   final folderPath = ref.watch(libraryFolderProvider);
   if (folderPath == null) return [];
 
   final directory = Directory(folderPath);
-  if (!directory.existsSync()) {
-    return [];
-  }
+  if (!directory.existsSync()) return [];
 
   try {
-    final allFiles = directory.listSync();
-    final files = allFiles
-        .where((f) => f is File && p.extension(f.path).toLowerCase() == '.pdf')
+    final files = directory
+        .listSync()
+        .where((f) => f is File && isSupportedDocumentPath(f.path))
         .toList();
     files.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
     return files;
   } catch (_) {
     return [];
   }
+});
+
+final pdfFilesProvider = Provider<List<FileSystemEntity>>((ref) {
+  return ref
+      .watch(libraryFilesProvider)
+      .where((f) => p.extension(f.path).toLowerCase() == '.pdf')
+      .toList();
 });

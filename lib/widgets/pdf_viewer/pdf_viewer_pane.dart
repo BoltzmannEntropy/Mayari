@@ -14,6 +14,7 @@ import '../../providers/sources_provider.dart';
 import '../../providers/tts_provider.dart';
 import '../../providers/model_download_provider.dart';
 import '../../providers/audiobook_provider.dart';
+import '../../services/document_format.dart';
 import '../dialogs/model_download_dialog.dart';
 import '../tts/speaker_cards.dart';
 import '../tts/tts_reading_indicator.dart';
@@ -984,7 +985,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
     setState(() {});
   }
 
-  Future<void> _openPdfFromPath(String filePath) async {
+  Future<void> _openDocumentFromPath(String filePath) async {
     final source = await ref
         .read(sourcesProvider.notifier)
         .ensureSourceForFile(filePath);
@@ -1005,26 +1006,30 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
 
     if (paths.isEmpty) return;
 
-    final pdfPaths = paths
+    final documentPaths = paths
         .where(
           (path) =>
               FileSystemEntity.typeSync(path) == FileSystemEntityType.file &&
-              p.extension(path).toLowerCase() == '.pdf',
+              isSupportedDocumentPath(path),
         )
         .toList();
 
-    if (pdfPaths.isEmpty) {
+    if (documentPaths.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Drop a PDF file to open it')),
+          const SnackBar(
+            content: Text('Drop a PDF, DOCX, or EPUB file to open it'),
+          ),
         );
       }
       return;
     }
 
-    ref.read(libraryFolderProvider.notifier).state = p.dirname(pdfPaths.first);
-    for (final path in pdfPaths) {
-      await _openPdfFromPath(path);
+    ref.read(libraryFolderProvider.notifier).state = p.dirname(
+      documentPaths.first,
+    );
+    for (final path in documentPaths) {
+      await _openDocumentFromPath(path);
     }
   }
 

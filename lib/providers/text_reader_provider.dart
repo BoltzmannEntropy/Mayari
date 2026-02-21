@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/document_text_extractor.dart';
 
 /// Default text content - Plato/Socrates quotes
 const String defaultMarkdownText = '''
@@ -27,12 +28,20 @@ class TextReaderState {
   final bool isEditMode;
   final int currentParagraph;
   final List<String> paragraphs;
+  final bool isLoadingDocument;
+  final String? loadedDocumentPath;
+  final String? loadedDocumentTitle;
+  final String? documentError;
 
   const TextReaderState({
     this.markdownText = defaultMarkdownText,
     this.isEditMode = false,
     this.currentParagraph = 0,
     this.paragraphs = const [],
+    this.isLoadingDocument = false,
+    this.loadedDocumentPath,
+    this.loadedDocumentTitle,
+    this.documentError,
   });
 
   TextReaderState copyWith({
@@ -40,12 +49,29 @@ class TextReaderState {
     bool? isEditMode,
     int? currentParagraph,
     List<String>? paragraphs,
+    bool? isLoadingDocument,
+    String? loadedDocumentPath,
+    String? loadedDocumentTitle,
+    String? documentError,
+    bool clearLoadedDocumentPath = false,
+    bool clearLoadedDocumentTitle = false,
+    bool clearDocumentError = false,
   }) {
     return TextReaderState(
       markdownText: markdownText ?? this.markdownText,
       isEditMode: isEditMode ?? this.isEditMode,
       currentParagraph: currentParagraph ?? this.currentParagraph,
       paragraphs: paragraphs ?? this.paragraphs,
+      isLoadingDocument: isLoadingDocument ?? this.isLoadingDocument,
+      loadedDocumentPath: clearLoadedDocumentPath
+          ? null
+          : (loadedDocumentPath ?? this.loadedDocumentPath),
+      loadedDocumentTitle: clearLoadedDocumentTitle
+          ? null
+          : (loadedDocumentTitle ?? this.loadedDocumentTitle),
+      documentError: clearDocumentError
+          ? null
+          : (documentError ?? this.documentError),
     );
   }
 
@@ -93,8 +119,57 @@ class TextReaderNotifier extends StateNotifier<TextReaderState> {
     state = state.copyWith(
       markdownText: text,
       currentParagraph: 0,
+      clearLoadedDocumentPath: true,
+      clearLoadedDocumentTitle: true,
+      clearDocumentError: true,
     );
     _parseIntoParagraphs();
+  }
+
+  void setTextFromDocument({
+    required String text,
+    required String path,
+    required String title,
+  }) {
+    state = state.copyWith(
+      markdownText: text,
+      currentParagraph: 0,
+      isEditMode: false,
+      isLoadingDocument: false,
+      loadedDocumentPath: path,
+      loadedDocumentTitle: title,
+      clearDocumentError: true,
+    );
+    _parseIntoParagraphs();
+  }
+
+  Future<void> loadDocument({
+    required String path,
+    required DocumentTextExtractor extractor,
+  }) async {
+    if (state.loadedDocumentPath == path && !state.isLoadingDocument) {
+      return;
+    }
+
+    state = state.copyWith(
+      isLoadingDocument: true,
+      loadedDocumentPath: path,
+      clearDocumentError: true,
+    );
+    try {
+      final extracted = await extractor.extractFromFile(path);
+      setTextFromDocument(
+        text: extracted.plainText,
+        path: path,
+        title: extracted.title ?? extracted.path,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoadingDocument: false,
+        loadedDocumentPath: path,
+        documentError: e.toString(),
+      );
+    }
   }
 
   /// Toggle between view and edit mode
@@ -120,6 +195,10 @@ class TextReaderNotifier extends StateNotifier<TextReaderState> {
       markdownText: defaultMarkdownText,
       currentParagraph: 0,
       isEditMode: false,
+      isLoadingDocument: false,
+      clearLoadedDocumentPath: true,
+      clearLoadedDocumentTitle: true,
+      clearDocumentError: true,
     );
     _parseIntoParagraphs();
   }
@@ -135,8 +214,8 @@ class TextReaderNotifier extends StateNotifier<TextReaderState> {
 /// Provider for text reader state
 final textReaderProvider =
     StateNotifierProvider<TextReaderNotifier, TextReaderState>((ref) {
-  return TextReaderNotifier();
-});
+      return TextReaderNotifier();
+    });
 
 /// Provider to track which content source is active
 enum ContentSource { pdf, text }

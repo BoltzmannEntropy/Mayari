@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import '../../providers/audiobook_provider.dart';
 
 /// Panel showing list of generated audiobooks with playback controls
@@ -129,6 +131,9 @@ class _AudiobookCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isActive = isPlaying || isPaused;
+    debugPrint(
+      '_AudiobookCard build: ${book.title} - isPlaying=$isPlaying, isPaused=$isPaused, isActive=$isActive',
+    );
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -254,6 +259,19 @@ class _AudiobookCard extends ConsumerWidget {
 
                 const Spacer(),
 
+                // Download/Export
+                IconButton(
+                  icon: const Icon(Icons.download, size: 16),
+                  onPressed: () => _downloadAudiobook(context),
+                  tooltip: 'Download',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                ),
+
                 // Show in Finder
                 IconButton(
                   icon: const Icon(Icons.folder_open, size: 16),
@@ -274,21 +292,70 @@ class _AudiobookCard extends ConsumerWidget {
     );
   }
 
-  void _playOrResume(WidgetRef ref) {
+  Future<void> _playOrResume(WidgetRef ref) async {
     final notifier = ref.read(audiobookPlaybackProvider.notifier);
     if (isPaused) {
-      notifier.resume();
+      await notifier.resume();
     } else {
-      notifier.play(book);
+      await notifier.play(book);
     }
   }
 
-  void _pause(WidgetRef ref) {
-    ref.read(audiobookPlaybackProvider.notifier).pause();
+  Future<void> _pause(WidgetRef ref) async {
+    await ref.read(audiobookPlaybackProvider.notifier).pause();
   }
 
-  void _stop(WidgetRef ref) {
-    ref.read(audiobookPlaybackProvider.notifier).stop();
+  Future<void> _stop(WidgetRef ref) async {
+    debugPrint('_AudiobookCard: _stop() called for ${book.title}');
+    await ref.read(audiobookPlaybackProvider.notifier).stop();
+    debugPrint('_AudiobookCard: _stop() completed');
+  }
+
+  Future<void> _downloadAudiobook(BuildContext context) async {
+    final sourceFile = File(book.path);
+    if (!sourceFile.existsSync()) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Audio file not found')));
+      }
+      return;
+    }
+
+    // Get save location from user
+    final fileName = '${book.title}.wav';
+    final savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Audiobook',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['wav'],
+    );
+
+    if (savePath == null) return;
+
+    try {
+      // Ensure .wav extension
+      final finalPath = savePath.endsWith('.wav') ? savePath : '$savePath.wav';
+      await sourceFile.copy(finalPath);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved to ${p.basename(finalPath)}'),
+            action: SnackBarAction(
+              label: 'Show',
+              onPressed: () => Process.run('open', ['-R', finalPath]),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
+      }
+    }
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {

@@ -1,13 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
-import '../providers/library_provider.dart';
-import '../providers/pdf_provider.dart';
+import '../models/source.dart';
 import '../providers/sources_provider.dart';
 import '../providers/text_reader_provider.dart';
-import '../widgets/library/library_sidebar.dart';
+import '../services/document_format.dart';
+import '../services/document_text_extractor.dart';
 import '../widgets/logs/logs_panel.dart';
 import '../widgets/pdf_viewer/pdf_viewer_pane.dart';
 import '../widgets/text_reader/text_reader_pane.dart';
@@ -20,7 +17,6 @@ class WorkspaceScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
-  static const double _libraryWidth = 200;
   final FocusNode _keyboardFocusNode = FocusNode();
   bool _initialSourceSelected = false;
 
@@ -43,7 +39,47 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     super.dispose();
   }
 
-  Widget _buildContentToggle(BuildContext context, ContentSource source) {
+  bool _isPdfSource(Source? source) =>
+      source == null || source.documentType == SupportedDocumentType.pdf;
+
+  Future<void> _handleActiveSourceChanged(Source? source) async {
+    if (source == null) return;
+    if (_isPdfSource(source)) return;
+
+    ref.read(activeContentSourceProvider.notifier).state = ContentSource.text;
+    await ref
+        .read(textReaderProvider.notifier)
+        .loadDocument(
+          path: source.filePath,
+          extractor: ref.read(documentTextExtractorProvider),
+        );
+  }
+
+  Widget _buildContentToggle(
+    BuildContext context,
+    ContentSource source,
+    Source? activeSource,
+  ) {
+    final isPdfSource = _isPdfSource(activeSource);
+    final selectedSource = !isPdfSource && source == ContentSource.pdf
+        ? ContentSource.text
+        : source;
+    final segments = <ButtonSegment<ContentSource>>[
+      ButtonSegment<ContentSource>(
+        value: ContentSource.pdf,
+        enabled: isPdfSource,
+        label: Text(isPdfSource ? 'PDF' : 'Document'),
+        icon: Icon(
+          isPdfSource ? Icons.picture_as_pdf : Icons.description_outlined,
+          size: 18,
+        ),
+      ),
+      const ButtonSegment<ContentSource>(
+        value: ContentSource.text,
+        label: Text('Text'),
+        icon: Icon(Icons.article, size: 18),
+      ),
+    ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -57,20 +93,14 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       child: Row(
         children: [
           SegmentedButton<ContentSource>(
-            segments: const [
-              ButtonSegment<ContentSource>(
-                value: ContentSource.pdf,
-                label: Text('PDF'),
-                icon: Icon(Icons.picture_as_pdf, size: 18),
-              ),
-              ButtonSegment<ContentSource>(
-                value: ContentSource.text,
-                label: Text('Text'),
-                icon: Icon(Icons.article, size: 18),
-              ),
-            ],
-            selected: {source},
+            segments: segments,
+            selected: {selectedSource},
             onSelectionChanged: (Set<ContentSource> selection) {
+              if (!isPdfSource && selection.first == ContentSource.pdf) {
+                ref.read(activeContentSourceProvider.notifier).state =
+                    ContentSource.text;
+                return;
+              }
               ref.read(activeContentSourceProvider.notifier).state =
                   selection.first;
             },
@@ -91,9 +121,22 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     final activeSource = ref.watch(activeSourceProvider);
     final sources = ref.watch(sourcesProvider);
     final activeSourceId = ref.watch(activeSourceIdProvider);
+    final isPdfSource = _isPdfSource(activeSource);
+
+    ref.listen<Source?>(activeSourceProvider, (previous, next) {
+      _handleActiveSourceChanged(next);
+    });
+
+    if (activeSource != null && !isPdfSource) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleActiveSourceChanged(activeSource);
+      });
+    }
 
     // Auto-select first source if none selected and sources exist
-    if (!_initialSourceSelected && activeSourceId == null && sources.isNotEmpty) {
+    if (!_initialSourceSelected &&
+        activeSourceId == null &&
+        sources.isNotEmpty) {
       _initialSourceSelected = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(activeSourceIdProvider.notifier).state = sources.first.id;
@@ -124,36 +167,25 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
         ),
         body: Column(
           children: [
-            // Main content area
+            // Main content area (PDF or Text)
             Expanded(
-              child: Row(
-                children: [
-                  // Library sidebar (fixed width)
-                  const SizedBox(
-                    width: _libraryWidth,
-                    child: LibrarySidebar(),
-                  ),
-                  // Main content area (PDF or Text)
-                  Expanded(
-                    child: Builder(
-                      builder: (context) {
-                        final contentSource = ref.watch(activeContentSourceProvider);
-                        return Column(
-                          children: [
-                            // Content source toggle
-                            _buildContentToggle(context, contentSource),
-                            // Content pane
-                            Expanded(
-                              child: contentSource == ContentSource.pdf
-                                  ? const PdfViewerPane()
-                                  : const TextReaderPane(),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ],
+              child: Builder(
+                builder: (context) {
+                  final contentSource = ref.watch(activeContentSourceProvider);
+                  return Column(
+                    children: [
+                      // Content source toggle
+                      _buildContentToggle(context, contentSource, activeSource),
+                      // Content pane
+                      Expanded(
+                        child:
+                            (contentSource == ContentSource.pdf && isPdfSource)
+                            ? const PdfViewerPane()
+                            : const TextReaderPane(),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             // System logs panel at bottom

@@ -1,35 +1,35 @@
-# Mayari v1.0.3 Release Notes
+# Mayari v1.0.4 Release Notes
 
 **Release Date:** February 21, 2026
 
 ## Highlights
 
-- Website now features audio demos showcasing all 8 British TTS voices
-- Hero section includes sample audio player for quick voice preview
-- Voice Samples section with playable demos for Emma, Isabella, Alice, Lily, George, Fable, Lewis, and Daniel
+- Added EPUB and DOCX read-aloud support alongside PDF.
+- Added bundled Examples with ready-made sample documents and audiobooks for PDF, DOCX, and EPUB.
+- Added voice cards and language cards with language-based voice filtering.
+- Added repository demo video (`assets/mayari-video.mov`) and replaced the MayariWEB hero image with the demo video.
 
-## Previous Release (v1.0.2)
+## Read-Aloud and Audiobooks
 
-- Added explicit `Play`, `Pause`, and `Stop` controls on each audiobook card.
-- Kept queue-based audiobook generation with jobs in the left sidebar (`Jobs` tab).
-- Added model file location visibility in Settings (`Text-to-Speech` > `Model location`).
-- Removed hardcoded external-volume PDF defaults that triggered removable-volume access issues.
-- Added readable-file checks so inaccessible/stale PDF paths are filtered out safely.
-- Improved extraction error messages for denied file access.
+- Unified extraction pipeline now supports `.pdf`, `.docx`, and `.epub`.
+- Audiobook creation is available for extracted text across supported document formats.
+- Included non-placeholder example audiobook WAV files for all three sample formats.
 
-## Audiobook Workflow
+## Voice UX
 
-- `Create Audiobook` enqueues background jobs immediately.
-- Jobs are processed sequentially and persisted across restarts.
-- Failed jobs expose detailed error messages and can be retried/cancelled.
+- Voice cards now expose language metadata in the UI.
+- Language cards allow selecting one or multiple languages to filter visible voices.
+- Added queue test action to pre-generate language test audiobook jobs.
 
-## Stability
+## Validation
 
-- Startup no longer depends on hardcoded `/Volumes/...` paths.
-- Saved sources that are no longer readable are auto-pruned.
+- `dart analyze` reports no issues.
+- Full Flutter test suite passes.
+- Service tests validate document extraction (PDF/DOCX/EPUB), examples loading, and voice catalog behavior.
+- macOS debug and release builds complete successfully.
 
 ## Distribution
 
-- **Version:** `1.0.3+4`
-- **Primary Artifact:** `Mayari-1.0.3.dmg`
+- **Version:** `1.0.4+5`
+- **Primary Artifact:** `Mayari-1.0.4.dmg`
 - **Platform:** macOS 15.0+ (Apple Silicon)
