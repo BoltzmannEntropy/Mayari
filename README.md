@@ -102,6 +102,16 @@ flutter pub get
 flutter run -d macos
 ```
 
+## Release Notices
+
+### Alpha Release
+
+This is an early alpha version intended for testing and development. Features may be incomplete, unstable, or change significantly before the stable release. Please report any issues on GitHub.
+
+### ✎ Unsigned Build
+
+This macOS build is not signed by Apple. You may need to right-click the app and select "Open" the first time you run it, or go to System Settings → Privacy & Security to allow it.
+
 ## Text-to-Speech
 
 Mayari uses **KokoroSwift**, a native Swift port of the Kokoro TTS model:
