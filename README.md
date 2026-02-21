@@ -75,7 +75,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 
 ### From DMG (Recommended)
 
-1. Download `Mayari-1.0.2.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
+1. Download `Mayari-1.0.3.dmg` from [Releases](https://github.com/BoltzmannEntropy/Mayari/releases)
 2. Open DMG and drag Mayari to Applications
 3. Right-click → Open (first launch only, for Gatekeeper)
 4. TTS model (~340MB) downloads automatically on first use
