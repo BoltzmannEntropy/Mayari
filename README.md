@@ -215,6 +215,8 @@ All demo samples are bundled in `assets/examples/audiobooks/`.
 - `long_history_bf_emma_20260221173325268396.wav`
 - `long_history_bm_george_20260221173325268396.wav`
 - `long_history_manifest_20260221173325268396.json`
+- `long-history-emma.mp3`
+- `long-history-george.mp3`
 
 ## Export Format
 
