@@ -7,13 +7,16 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as path;
 
 String _inferLanguageCodeFromVoiceId(String voiceId) {
-  if (voiceId.startsWith('af_') || voiceId.startsWith('am_')) {
-    return 'en-us';
-  }
-  if (voiceId.startsWith('bf_') || voiceId.startsWith('bm_')) {
-    return 'en-gb';
-  }
-  return 'en-gb';
+  if (voiceId.startsWith('af_') || voiceId.startsWith('am_')) return 'en-us';
+  if (voiceId.startsWith('bf_') || voiceId.startsWith('bm_')) return 'en-gb';
+  if (voiceId.startsWith('ef_') || voiceId.startsWith('em_')) return 'es-es';
+  if (voiceId.startsWith('ff_') || voiceId.startsWith('fm_')) return 'fr-fr';
+  if (voiceId.startsWith('hf_') || voiceId.startsWith('hm_')) return 'hi-in';
+  if (voiceId.startsWith('if_') || voiceId.startsWith('im_')) return 'it-it';
+  if (voiceId.startsWith('jf_') || voiceId.startsWith('jm_')) return 'ja-jp';
+  if (voiceId.startsWith('pf_') || voiceId.startsWith('pm_')) return 'pt-br';
+  if (voiceId.startsWith('zf_') || voiceId.startsWith('zm_')) return 'zh-cn';
+  return 'en-us';
 }
 
 String _languageNameForCode(String code) {
@@ -22,6 +25,20 @@ String _languageNameForCode(String code) {
       return 'English (US)';
     case 'en-gb':
       return 'English (UK)';
+    case 'es-es':
+      return 'Spanish';
+    case 'fr-fr':
+      return 'French';
+    case 'hi-in':
+      return 'Hindi';
+    case 'it-it':
+      return 'Italian';
+    case 'ja-jp':
+      return 'Japanese';
+    case 'pt-br':
+      return 'Brazilian Portuguese';
+    case 'zh-cn':
+      return 'Mandarin Chinese';
     default:
       return code;
   }
@@ -69,6 +86,7 @@ class TtsVoice {
 
 /// Available Kokoro voices (fallback if native unavailable).
 const List<TtsVoice> defaultVoices = [
+  // American English
   TtsVoice(
     id: 'af_alloy',
     name: 'Alloy',
@@ -229,6 +247,15 @@ const List<TtsVoice> defaultVoices = [
     languageCode: 'en-us',
     languageName: 'English (US)',
   ),
+  // British English
+  TtsVoice(
+    id: 'bf_alice',
+    name: 'Alice',
+    gender: 'female',
+    grade: 'D',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
   TtsVoice(
     id: 'bf_emma',
     name: 'Emma',
@@ -247,14 +274,6 @@ const List<TtsVoice> defaultVoices = [
     languageName: 'English (UK)',
   ),
   TtsVoice(
-    id: 'bf_alice',
-    name: 'Alice',
-    gender: 'female',
-    grade: 'D',
-    languageCode: 'en-gb',
-    languageName: 'English (UK)',
-  ),
-  TtsVoice(
     id: 'bf_lily',
     name: 'Lily',
     gender: 'female',
@@ -263,16 +282,24 @@ const List<TtsVoice> defaultVoices = [
     languageName: 'English (UK)',
   ),
   TtsVoice(
-    id: 'bm_george',
-    name: 'George',
+    id: 'bm_daniel',
+    name: 'Daniel',
     gender: 'male',
-    grade: 'C',
+    grade: 'D',
     languageCode: 'en-gb',
     languageName: 'English (UK)',
   ),
   TtsVoice(
     id: 'bm_fable',
     name: 'Fable',
+    gender: 'male',
+    grade: 'C',
+    languageCode: 'en-gb',
+    languageName: 'English (UK)',
+  ),
+  TtsVoice(
+    id: 'bm_george',
+    name: 'George',
     gender: 'male',
     grade: 'C',
     languageCode: 'en-gb',
@@ -286,13 +313,220 @@ const List<TtsVoice> defaultVoices = [
     languageCode: 'en-gb',
     languageName: 'English (UK)',
   ),
+  // Spanish
   TtsVoice(
-    id: 'bm_daniel',
-    name: 'Daniel',
+    id: 'ef_dora',
+    name: 'Dora',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'es-es',
+    languageName: 'Spanish',
+  ),
+  TtsVoice(
+    id: 'em_alex',
+    name: 'Alex',
     gender: 'male',
-    grade: 'D',
-    languageCode: 'en-gb',
-    languageName: 'English (UK)',
+    grade: 'N/A',
+    languageCode: 'es-es',
+    languageName: 'Spanish',
+  ),
+  TtsVoice(
+    id: 'em_santa',
+    name: 'Santa',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'es-es',
+    languageName: 'Spanish',
+  ),
+  // French
+  TtsVoice(
+    id: 'ff_siwis',
+    name: 'Siwis',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'fr-fr',
+    languageName: 'French',
+  ),
+  // Hindi
+  TtsVoice(
+    id: 'hf_alpha',
+    name: 'Alpha',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'hi-in',
+    languageName: 'Hindi',
+  ),
+  TtsVoice(
+    id: 'hf_beta',
+    name: 'Beta',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'hi-in',
+    languageName: 'Hindi',
+  ),
+  TtsVoice(
+    id: 'hm_omega',
+    name: 'Omega',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'hi-in',
+    languageName: 'Hindi',
+  ),
+  TtsVoice(
+    id: 'hm_psi',
+    name: 'Psi',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'hi-in',
+    languageName: 'Hindi',
+  ),
+  // Italian
+  TtsVoice(
+    id: 'if_sara',
+    name: 'Sara',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'it-it',
+    languageName: 'Italian',
+  ),
+  TtsVoice(
+    id: 'im_nicola',
+    name: 'Nicola',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'it-it',
+    languageName: 'Italian',
+  ),
+  // Japanese
+  TtsVoice(
+    id: 'jf_alpha',
+    name: 'Alpha',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'ja-jp',
+    languageName: 'Japanese',
+  ),
+  TtsVoice(
+    id: 'jf_gongitsune',
+    name: 'Gongitsune',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'ja-jp',
+    languageName: 'Japanese',
+  ),
+  TtsVoice(
+    id: 'jf_nezumi',
+    name: 'Nezumi',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'ja-jp',
+    languageName: 'Japanese',
+  ),
+  TtsVoice(
+    id: 'jf_tebukuro',
+    name: 'Tebukuro',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'ja-jp',
+    languageName: 'Japanese',
+  ),
+  TtsVoice(
+    id: 'jm_kumo',
+    name: 'Kumo',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'ja-jp',
+    languageName: 'Japanese',
+  ),
+  // Brazilian Portuguese
+  TtsVoice(
+    id: 'pf_dora',
+    name: 'Dora',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'pt-br',
+    languageName: 'Brazilian Portuguese',
+  ),
+  TtsVoice(
+    id: 'pm_alex',
+    name: 'Alex',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'pt-br',
+    languageName: 'Brazilian Portuguese',
+  ),
+  TtsVoice(
+    id: 'pm_santa',
+    name: 'Santa',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'pt-br',
+    languageName: 'Brazilian Portuguese',
+  ),
+  // Mandarin Chinese
+  TtsVoice(
+    id: 'zf_xiaobei',
+    name: 'Xiaobei',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
+  ),
+  TtsVoice(
+    id: 'zf_xiaoni',
+    name: 'Xiaoni',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
+  ),
+  TtsVoice(
+    id: 'zf_xiaoxiao',
+    name: 'Xiaoxiao',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
+  ),
+  TtsVoice(
+    id: 'zf_xiaoyi',
+    name: 'Xiaoyi',
+    gender: 'female',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
+  ),
+  TtsVoice(
+    id: 'zm_yunjian',
+    name: 'Yunjian',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
+  ),
+  TtsVoice(
+    id: 'zm_yunxi',
+    name: 'Yunxi',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
+  ),
+  TtsVoice(
+    id: 'zm_yunxia',
+    name: 'Yunxia',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
+  ),
+  TtsVoice(
+    id: 'zm_yunyang',
+    name: 'Yunyang',
+    gender: 'male',
+    grade: 'N/A',
+    languageCode: 'zh-cn',
+    languageName: 'Mandarin Chinese',
   ),
 ];
 

@@ -13,7 +13,9 @@ struct KokoroVoice {
     let name: String
     let gender: String
     let grade: String
-    let language: Language
+    let languageCode: String
+    let languageName: String
+    let synthesisLanguage: Language
     let isDefault: Bool
 
     func toDictionary() -> [String: Any] {
@@ -22,43 +24,100 @@ struct KokoroVoice {
             "name": name,
             "gender": gender,
             "grade": grade,
-            "language_code": language.rawValue,
-            "language_name": language == .enUS ? "English (US)" : "English (UK)",
+            "language_code": languageCode,
+            "language_name": languageName,
             "is_default": isDefault
         ]
     }
 }
 
-/// Available Kokoro English voices from voices.npz.
+private func makeVoice(
+    _ id: String,
+    _ name: String,
+    _ gender: String,
+    _ grade: String,
+    _ languageCode: String,
+    _ languageName: String,
+    isDefault: Bool = false
+) -> KokoroVoice {
+    let synthesisLanguage: Language = (languageCode == "en-gb") ? .enGB : .enUS
+    return KokoroVoice(
+        id: id,
+        name: name,
+        gender: gender,
+        grade: grade,
+        languageCode: languageCode,
+        languageName: languageName,
+        synthesisLanguage: synthesisLanguage,
+        isDefault: isDefault
+    )
+}
+
+/// Available Kokoro voices from voices.npz.
 let kokoroVoices: [KokoroVoice] = [
-    KokoroVoice(id: "af_alloy", name: "Alloy", gender: "female", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_aoede", name: "Aoede", gender: "female", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_bella", name: "Bella", gender: "female", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_heart", name: "Heart", gender: "female", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_jessica", name: "Jessica", gender: "female", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_kore", name: "Kore", gender: "female", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_nicole", name: "Nicole", gender: "female", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_nova", name: "Nova", gender: "female", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_river", name: "River", gender: "female", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_sarah", name: "Sarah", gender: "female", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "af_sky", name: "Sky", gender: "female", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_adam", name: "Adam", gender: "male", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_echo", name: "Echo", gender: "male", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_eric", name: "Eric", gender: "male", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_fenrir", name: "Fenrir", gender: "male", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_liam", name: "Liam", gender: "male", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_michael", name: "Michael", gender: "male", grade: "B", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_onyx", name: "Onyx", gender: "male", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_puck", name: "Puck", gender: "male", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "am_santa", name: "Santa", gender: "male", grade: "C", language: .enUS, isDefault: false),
-    KokoroVoice(id: "bf_emma", name: "Emma", gender: "female", grade: "B-", language: .enGB, isDefault: true),
-    KokoroVoice(id: "bf_isabella", name: "Isabella", gender: "female", grade: "C", language: .enGB, isDefault: false),
-    KokoroVoice(id: "bf_alice", name: "Alice", gender: "female", grade: "D", language: .enGB, isDefault: false),
-    KokoroVoice(id: "bf_lily", name: "Lily", gender: "female", grade: "D", language: .enGB, isDefault: false),
-    KokoroVoice(id: "bm_george", name: "George", gender: "male", grade: "C", language: .enGB, isDefault: false),
-    KokoroVoice(id: "bm_fable", name: "Fable", gender: "male", grade: "C", language: .enGB, isDefault: false),
-    KokoroVoice(id: "bm_lewis", name: "Lewis", gender: "male", grade: "D+", language: .enGB, isDefault: false),
-    KokoroVoice(id: "bm_daniel", name: "Daniel", gender: "male", grade: "D", language: .enGB, isDefault: false),
+    // American English
+    makeVoice("af_alloy", "Alloy", "female", "C", "en-us", "English (US)"),
+    makeVoice("af_aoede", "Aoede", "female", "C", "en-us", "English (US)"),
+    makeVoice("af_bella", "Bella", "female", "B", "en-us", "English (US)"),
+    makeVoice("af_heart", "Heart", "female", "B", "en-us", "English (US)"),
+    makeVoice("af_jessica", "Jessica", "female", "B", "en-us", "English (US)"),
+    makeVoice("af_kore", "Kore", "female", "C", "en-us", "English (US)"),
+    makeVoice("af_nicole", "Nicole", "female", "B", "en-us", "English (US)"),
+    makeVoice("af_nova", "Nova", "female", "B", "en-us", "English (US)"),
+    makeVoice("af_river", "River", "female", "C", "en-us", "English (US)"),
+    makeVoice("af_sarah", "Sarah", "female", "B", "en-us", "English (US)"),
+    makeVoice("af_sky", "Sky", "female", "C", "en-us", "English (US)"),
+    makeVoice("am_adam", "Adam", "male", "B", "en-us", "English (US)"),
+    makeVoice("am_echo", "Echo", "male", "C", "en-us", "English (US)"),
+    makeVoice("am_eric", "Eric", "male", "B", "en-us", "English (US)"),
+    makeVoice("am_fenrir", "Fenrir", "male", "C", "en-us", "English (US)"),
+    makeVoice("am_liam", "Liam", "male", "B", "en-us", "English (US)"),
+    makeVoice("am_michael", "Michael", "male", "B", "en-us", "English (US)"),
+    makeVoice("am_onyx", "Onyx", "male", "C", "en-us", "English (US)"),
+    makeVoice("am_puck", "Puck", "male", "C", "en-us", "English (US)"),
+    makeVoice("am_santa", "Santa", "male", "C", "en-us", "English (US)"),
+    // British English
+    makeVoice("bf_alice", "Alice", "female", "D", "en-gb", "English (UK)"),
+    makeVoice("bf_emma", "Emma", "female", "B-", "en-gb", "English (UK)", isDefault: true),
+    makeVoice("bf_isabella", "Isabella", "female", "C", "en-gb", "English (UK)"),
+    makeVoice("bf_lily", "Lily", "female", "D", "en-gb", "English (UK)"),
+    makeVoice("bm_daniel", "Daniel", "male", "D", "en-gb", "English (UK)"),
+    makeVoice("bm_fable", "Fable", "male", "C", "en-gb", "English (UK)"),
+    makeVoice("bm_george", "George", "male", "C", "en-gb", "English (UK)"),
+    makeVoice("bm_lewis", "Lewis", "male", "D+", "en-gb", "English (UK)"),
+    // Spanish
+    makeVoice("ef_dora", "Dora", "female", "N/A", "es-es", "Spanish"),
+    makeVoice("em_alex", "Alex", "male", "N/A", "es-es", "Spanish"),
+    makeVoice("em_santa", "Santa", "male", "N/A", "es-es", "Spanish"),
+    // French
+    makeVoice("ff_siwis", "Siwis", "female", "N/A", "fr-fr", "French"),
+    // Hindi
+    makeVoice("hf_alpha", "Alpha", "female", "N/A", "hi-in", "Hindi"),
+    makeVoice("hf_beta", "Beta", "female", "N/A", "hi-in", "Hindi"),
+    makeVoice("hm_omega", "Omega", "male", "N/A", "hi-in", "Hindi"),
+    makeVoice("hm_psi", "Psi", "male", "N/A", "hi-in", "Hindi"),
+    // Italian
+    makeVoice("if_sara", "Sara", "female", "N/A", "it-it", "Italian"),
+    makeVoice("im_nicola", "Nicola", "male", "N/A", "it-it", "Italian"),
+    // Japanese
+    makeVoice("jf_alpha", "Alpha", "female", "N/A", "ja-jp", "Japanese"),
+    makeVoice("jf_gongitsune", "Gongitsune", "female", "N/A", "ja-jp", "Japanese"),
+    makeVoice("jf_nezumi", "Nezumi", "female", "N/A", "ja-jp", "Japanese"),
+    makeVoice("jf_tebukuro", "Tebukuro", "female", "N/A", "ja-jp", "Japanese"),
+    makeVoice("jm_kumo", "Kumo", "male", "N/A", "ja-jp", "Japanese"),
+    // Brazilian Portuguese
+    makeVoice("pf_dora", "Dora", "female", "N/A", "pt-br", "Brazilian Portuguese"),
+    makeVoice("pm_alex", "Alex", "male", "N/A", "pt-br", "Brazilian Portuguese"),
+    makeVoice("pm_santa", "Santa", "male", "N/A", "pt-br", "Brazilian Portuguese"),
+    // Mandarin Chinese
+    makeVoice("zf_xiaobei", "Xiaobei", "female", "N/A", "zh-cn", "Mandarin Chinese"),
+    makeVoice("zf_xiaoni", "Xiaoni", "female", "N/A", "zh-cn", "Mandarin Chinese"),
+    makeVoice("zf_xiaoxiao", "Xiaoxiao", "female", "N/A", "zh-cn", "Mandarin Chinese"),
+    makeVoice("zf_xiaoyi", "Xiaoyi", "female", "N/A", "zh-cn", "Mandarin Chinese"),
+    makeVoice("zm_yunjian", "Yunjian", "male", "N/A", "zh-cn", "Mandarin Chinese"),
+    makeVoice("zm_yunxi", "Yunxi", "male", "N/A", "zh-cn", "Mandarin Chinese"),
+    makeVoice("zm_yunxia", "Yunxia", "male", "N/A", "zh-cn", "Mandarin Chinese"),
+    makeVoice("zm_yunyang", "Yunyang", "male", "N/A", "zh-cn", "Mandarin Chinese"),
 ]
 
 /// TTS Plugin for Flutter using KokoroSwift
@@ -75,9 +134,9 @@ class KokoroTTSPlugin: NSObject, FlutterPlugin {
 
     private func languageForVoiceId(_ voiceId: String) -> Language {
         if let voice = kokoroVoices.first(where: { $0.id == voiceId }) {
-            return voice.language
+            return voice.synthesisLanguage
         }
-        return .enGB
+        return .enUS
     }
 
     static func register(with registrar: FlutterPluginRegistrar) {
