@@ -6,6 +6,11 @@
     ·
     <a href="https://github.com/BoltzmannEntropy/Mayari"><strong>GitHub</strong></a>
   </p>
+  <p>
+    <a href="https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.4/Mayari-1.0.4.dmg">
+      <img alt="Download for OSX" src="https://img.shields.io/badge/Download%20for-OSX-7C3AED?style=for-the-badge&logo=apple&logoColor=white">
+    </a>
+  </p>
 </div>
 
 ## Demo Video
