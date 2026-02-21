@@ -61,3 +61,4 @@ flutter:
   assets:
     - assets/examples/documents/
     - assets/examples/audiobooks/
+    - assets/examples/texts/

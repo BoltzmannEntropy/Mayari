@@ -983,8 +983,9 @@ class TtsService {
     }
 
     try {
+      final timeout = _audiobookTimeoutFor(chunks);
       debugPrint(
-        'TTS: Starting audiobook generation with ${chunks.length} chunks',
+        'TTS: Starting audiobook generation with ${chunks.length} chunks (timeout: ${timeout.inMinutes}m)',
       );
 
       final result = await _channel
@@ -997,9 +998,12 @@ class TtsService {
             'requestId': requestId,
           })
           .timeout(
-            const Duration(minutes: 8),
-            onTimeout: () =>
-                throw TimeoutException('Audiobook generation timed out'),
+            timeout,
+            onTimeout: () {
+              throw TimeoutException(
+                'Audiobook generation timed out after ${timeout.inMinutes} minutes',
+              );
+            },
           );
 
       if (result != null) {
@@ -1023,6 +1027,15 @@ class TtsService {
     }
 
     return null;
+  }
+
+  Duration _audiobookTimeoutFor(List<String> chunks) {
+    if (chunks.isEmpty) return const Duration(minutes: 8);
+    final chunkCount = chunks.length;
+    // Base + per-chunk budget so long public-domain books do not fail early.
+    final estimatedSeconds = 120 + (chunkCount * 3);
+    final clampedSeconds = estimatedSeconds.clamp(480, 5400);
+    return Duration(seconds: clampedSeconds);
   }
 
   /// Dispose resources

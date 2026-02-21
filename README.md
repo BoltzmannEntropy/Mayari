@@ -154,6 +154,34 @@ The exact active paths are shown in-app under `Settings → Text-to-Speech → M
 - Jobs support retry/cancel/remove, and completed jobs appear in the `Audio` tab.
 - Audiobook cards now have explicit `Play`, `Pause`, and `Stop` buttons.
 
+## Long-Form Audiobook Test (Public Domain)
+
+Mayari includes a bundled long public-domain history excerpt:
+
+- `assets/examples/texts/public_domain_history_wells_excerpt.txt`
+- Source: Project Gutenberg #35461, *A Short History of the World* by H. G. Wells
+
+Generate long-form test audiobooks through the native TTS API (MethodChannel) with British voices:
+
+```bash
+./scripts/generate-long-history-audiobooks.sh
+```
+
+Optional configuration:
+
+```bash
+MAYARI_LONG_TEST_VOICES="bf_emma,bm_george,bm_lewis" \
+MAYARI_LONG_TEST_MAX_CHARS=120000 \
+MAYARI_LONG_TEST_SPEED=1.0 \
+./scripts/generate-long-history-audiobooks.sh
+```
+
+Outputs are written to:
+
+- `~/Documents/Mayari Audiobooks/long-history-tests/`
+
+Then open the generated `.wav` files directly in Finder/QuickTime to listen.
+
 ## Export Format
 
 Quotes export as markdown:
@@ -184,6 +212,7 @@ macos/Runner/
 
 scripts/
 ├── build-dmg.sh     DMG builder
+├── generate-long-history-audiobooks.sh Long-text British voice test runner
 ├── release.sh       macOS release automation
 ├── check-ios-dist.sh iOS/iPad preflight validation
 └── release-ios.sh   iOS/iPad IPA build + optional upload
@@ -243,7 +272,7 @@ bash ./scripts/release-ios.sh --upload --dist testflight
 
 - Requires macOS 15.0+ and Apple Silicon
 - Quote capture needs selectable PDF text (no OCR)
-- British English voices only
+- Non-English voices are listed in catalog, but synthesis language routing is currently optimized for English in the native runtime
 
 ## Star History
 

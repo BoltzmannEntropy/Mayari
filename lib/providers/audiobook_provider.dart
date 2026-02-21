@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import '../services/audiobook_chunking.dart';
 import '../services/storage_service.dart';
 import '../services/tts_service.dart';
 import 'tts_provider.dart';
@@ -330,7 +331,8 @@ class AudiobooksNotifier extends StateNotifier<List<Audiobook>> {
       existingPaths.add(book.path);
     }
     if (additions.isEmpty) return;
-    state = [...additions, ...state]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    state = [...additions, ...state]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     await _saveAudiobooks();
   }
 
@@ -369,7 +371,8 @@ class AudiobooksNotifier extends StateNotifier<List<Audiobook>> {
 
       // Try to get duration from file size (approximate: ~176KB per second for WAV)
       final fileSize = file.lengthSync();
-      final estimatedDuration = fileSize / 176400.0; // 44100 Hz * 2 bytes * 2 channels
+      final estimatedDuration =
+          fileSize / 176400.0; // 44100 Hz * 2 bytes * 2 channels
 
       final audiobook = Audiobook(
         id: const Uuid().v4(),
@@ -474,111 +477,7 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
   }
 
   List<String> _prepareChunksForGeneration(List<String> chunks) {
-    const targetChunkChars = 180;
-    const maxChunks = 1200;
-    final prepared = <String>[];
-
-    for (final raw in chunks) {
-      final normalized = raw
-          .replaceAll('\u00A0', ' ')
-          .replaceAll('\r', '\n')
-          .replaceAll(RegExp(r'[ \t]+'), ' ')
-          .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-          .trim();
-      if (normalized.isEmpty) continue;
-
-      final sentences = normalized
-          .split(RegExp(r'(?<=[.!?])\s+|\n+'))
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-
-      if (sentences.isEmpty) {
-        _splitLongChunk(normalized, targetChunkChars, prepared);
-        continue;
-      }
-
-      final current = StringBuffer();
-      for (final sentence in sentences) {
-        final candidate = current.isEmpty
-            ? sentence
-            : '${current.toString()} $sentence';
-        if (candidate.length <= targetChunkChars) {
-          current
-            ..clear()
-            ..write(candidate);
-          continue;
-        }
-
-        if (current.isNotEmpty) {
-          prepared.add(current.toString().trim());
-          current.clear();
-        }
-
-        if (sentence.length <= targetChunkChars) {
-          current.write(sentence);
-        } else {
-          _splitLongChunk(sentence, targetChunkChars, prepared);
-        }
-      }
-
-      if (current.isNotEmpty) {
-        prepared.add(current.toString().trim());
-      }
-    }
-
-    final deduped = <String>[];
-    String? previousNormalized;
-    for (final chunk in prepared) {
-      final normalized = chunk
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-      if (normalized.isEmpty) continue;
-      if (normalized == previousNormalized) continue;
-      deduped.add(chunk.trim());
-      previousNormalized = normalized;
-      if (deduped.length >= maxChunks) break;
-    }
-
-    return deduped;
-  }
-
-  void _splitLongChunk(String chunk, int targetChunkChars, List<String> out) {
-    final words = chunk
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .toList();
-    if (words.isEmpty) return;
-
-    final current = StringBuffer();
-    for (final word in words) {
-      final candidate = current.isEmpty ? word : '${current.toString()} $word';
-      if (candidate.length <= targetChunkChars) {
-        current
-          ..clear()
-          ..write(candidate);
-        continue;
-      }
-      if (current.isNotEmpty) {
-        out.add(current.toString().trim());
-        current.clear();
-      }
-      if (word.length > targetChunkChars) {
-        var start = 0;
-        while (start < word.length) {
-          final end = (start + targetChunkChars).clamp(0, word.length).toInt();
-          out.add(word.substring(start, end).trim());
-          start = end;
-        }
-      } else {
-        current.write(word);
-      }
-    }
-    if (current.isNotEmpty) {
-      out.add(current.toString().trim());
-    }
+    return AudiobookChunking.prepareChunksForGeneration(chunks);
   }
 
   Future<void> enqueue({
@@ -850,7 +749,9 @@ class AudiobookPlaybackNotifier extends StateNotifier<AudiobookPlaybackState> {
   }
 
   Future<void> play(Audiobook book) async {
-    debugPrint('AudiobookPlayback: play() called for "${book.title}" (id: ${book.id})');
+    debugPrint(
+      'AudiobookPlayback: play() called for "${book.title}" (id: ${book.id})',
+    );
     try {
       // Stop any existing playback first to avoid stream conflicts
       if (state.playingId != null) {
@@ -866,7 +767,9 @@ class AudiobookPlaybackNotifier extends StateNotifier<AudiobookPlaybackState> {
         isPlaying: true,
         isPaused: false,
       );
-      debugPrint('AudiobookPlayback: state updated - playingId=${state.playingId}, isPlaying=${state.isPlaying}');
+      debugPrint(
+        'AudiobookPlayback: state updated - playingId=${state.playingId}, isPlaying=${state.isPlaying}',
+      );
     } catch (e) {
       debugPrint('AudiobookPlayback: Error playing audiobook: $e');
       state = const AudiobookPlaybackState();
@@ -884,7 +787,9 @@ class AudiobookPlaybackNotifier extends StateNotifier<AudiobookPlaybackState> {
   }
 
   Future<void> stop() async {
-    debugPrint('AudiobookPlayback: stop() called, current state: playingId=${state.playingId}, isPlaying=${state.isPlaying}, isPaused=${state.isPaused}');
+    debugPrint(
+      'AudiobookPlayback: stop() called, current state: playingId=${state.playingId}, isPlaying=${state.isPlaying}, isPaused=${state.isPaused}',
+    );
     await _player.stop();
     state = const AudiobookPlaybackState();
     debugPrint('AudiobookPlayback: stop() complete, state reset');
