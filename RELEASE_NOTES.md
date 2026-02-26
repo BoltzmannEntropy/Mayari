@@ -1,6 +1,6 @@
-# Mayari v1.0.5 Release Notes
+# Mayari v1.0.6 Release Notes
 
-**Release Date:** February 21, 2026
+**Release Date:** February 26, 2026
 
 ## Highlights
 
@@ -36,6 +36,17 @@
 
 ## Distribution
 
-- **Version:** `1.0.5+6`
-- **Primary Artifact:** `Mayari-1.0.5.dmg`
+- **Version:** `1.0.6+7`
+- **Primary Artifact:** `Mayari-1.0.6.dmg`
 - **Platform:** macOS 15.0+ (Apple Silicon)
+
+## Unsigned DMG (Apple Gatekeeper)
+
+As of February 26, 2026, this DMG is not signed/notarized by Apple.
+
+1. Open the DMG and drag `Mayari.app` to `Applications`.
+2. In `Applications`, right-click `Mayari.app` and choose `Open`.
+3. Click `Open` in the warning dialog.
+4. If launch is still blocked, go to `System Settings -> Privacy & Security`.
+5. Click `Open Anyway` for Mayari and confirm with password/Touch ID.
+6. Relaunch Mayari from `Applications`.

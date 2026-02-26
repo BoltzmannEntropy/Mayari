@@ -21,8 +21,12 @@ if [[ ! -f "$SKILL_CHECKER" ]]; then
   exit 0
 fi
 
+# Force project-based scheme check; workspace listing is unreliable in some CI/sandbox environments.
 bash "$SKILL_CHECKER" \
   --app-root "$PROJECT_DIR" \
+  --workspace "$PROJECT_DIR/ios/.workspace-skip" \
+  --project "$PROJECT_DIR/ios/Runner.xcodeproj" \
+  --scheme "Runner" \
   --privacy-url "$PRIVACY_URL_DEFAULT" \
   --support-url "$SUPPORT_URL_DEFAULT" \
   "$@"

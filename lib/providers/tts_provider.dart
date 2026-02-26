@@ -545,11 +545,15 @@ class TtsNotifier extends StateNotifier<TtsState> {
       state = state.copyWith(playbackState: TtsPlaybackState.playing);
       _startWordTracking(text);
     } else {
-      _log.error('TTS', 'Failed to start playback - check Kokoro server');
+      _log.error(
+        'TTS',
+        'Failed to start playback - native Kokoro model may be unavailable',
+      );
       _resetTrackingState(clearPreview: false);
       state = state.copyWith(
         playbackState: TtsPlaybackState.stopped,
-        errorMessage: 'Failed to start TTS. Make sure Kokoro is set up.',
+        errorMessage:
+            'Failed to start TTS. Verify the Kokoro model is downloaded and loaded.',
       );
     }
   }

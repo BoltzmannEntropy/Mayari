@@ -1,4 +1,4 @@
-const String appVersion = '1.0.4';
-const int buildNumber = 5;
-const String versionName = 'Multiformat Read Aloud + Demo Video';
+const String appVersion = '1.0.6';
+const int buildNumber = 7;
+const String versionName = 'Long-Form Audiobooks + Multilingual Voice Catalog';
 String get versionString => '$appVersion (build $buildNumber)';

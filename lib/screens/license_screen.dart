@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../version.dart';
 
 /// License screen showing app license and third-party licenses
 class LicenseScreen extends StatelessWidget {
@@ -207,7 +208,7 @@ class LicenseScreen extends StatelessWidget {
                       showLicensePage(
                         context: context,
                         applicationName: 'Mayari',
-                        applicationVersion: '1.0.0',
+                        applicationVersion: versionString,
                         applicationLegalese: '2025 QNeura.ai',
                       );
                     },

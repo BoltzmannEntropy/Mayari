@@ -77,7 +77,7 @@ class AudiobooksPanel extends ConsumerWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Create one from a PDF',
+                            'Create one from any document',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant
                                   .withValues(alpha: 0.7),
@@ -200,6 +200,19 @@ class _AudiobookCard extends ConsumerWidget {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              book.path,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: 10,
+                color: theme.colorScheme.onSurfaceVariant,
+                fontFamily: 'monospace',
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
 
           // Progress bar (if playing/paused)
           if (isActive)
@@ -260,6 +273,18 @@ class _AudiobookCard extends ConsumerWidget {
                 const Spacer(),
 
                 // Download/Export
+                IconButton(
+                  icon: const Icon(Icons.auto_awesome, size: 16),
+                  onPressed: () => _queueOptimizedExport(context, ref),
+                  tooltip: 'Queue optimized export',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                ),
+
                 IconButton(
                   icon: const Icon(Icons.download, size: 16),
                   onPressed: () => _downloadAudiobook(context),
@@ -356,6 +381,25 @@ class _AudiobookCard extends ConsumerWidget {
         ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
       }
     }
+  }
+
+  Future<void> _queueOptimizedExport(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final queued = await ref
+        .read(audiobookJobsProvider.notifier)
+        .enqueueOptimizedExport(title: book.title, sourcePath: book.path);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          queued
+              ? 'Optimized export queued in Jobs.'
+              : 'Failed to queue optimized export.',
+        ),
+      ),
+    );
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {

@@ -34,14 +34,14 @@ void main() {
 
     final bundle = await ExamplesLoaderService().loadExamples();
 
-    expect(bundle.documents.length, 3);
+    expect(bundle.documents.length, 5);
     expect(bundle.audiobooks.length, 3);
     expect(Directory(bundle.documentsDirectory).existsSync(), isTrue);
 
     for (final doc in bundle.documents) {
       expect(File(doc.path).existsSync(), isTrue);
       final ext = p.extension(doc.path).toLowerCase();
-      expect({'.pdf', '.docx', '.epub'}.contains(ext), isTrue);
+      expect({'.pdf', '.docx', '.epub', '.md', '.txt'}.contains(ext), isTrue);
     }
 
     for (final audio in bundle.audiobooks) {

@@ -22,13 +22,13 @@ OUT_FILE="$OUT_DIR/issues_$(date +%Y%m%d_%H%M%S).txt"
   echo
 
   echo "== Ports =="
-  lsof -iTCP:8787 -sTCP:LISTEN -n -P || true
   lsof -iTCP:8086 -sTCP:LISTEN -n -P || true
+  lsof -iTCP:8787 -sTCP:LISTEN -n -P || true
   echo
 
   echo "== Health Checks =="
-  echo "Backend /health:"
-  curl -s --connect-timeout 3 http://127.0.0.1:8787/health || echo "unreachable"
+  echo "Mayari MCP /api/health:"
+  curl -s --connect-timeout 3 http://127.0.0.1:8086/api/health || echo "unreachable"
   echo
   echo "MCP tools/list:"
   curl -s --connect-timeout 3 -H 'Content-Type: application/json' \

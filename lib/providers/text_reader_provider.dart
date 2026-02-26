@@ -1,25 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/document_text_extractor.dart';
 
-/// Default text content - Plato/Socrates quotes
+/// Default text content for Markdown read-aloud.
 const String defaultMarkdownText = '''
-> "The mind is not a vessel to be filled, but a fire to be kindled."
->
-> — Socrates, as quoted by Plutarch
+# Mayari Default Markdown
 
-And those who were seen dancing were thought to be insane by those who could not hear the music.
+This is the default Markdown content for read-aloud and audiobook generation.
 
-*True wisdom comes to each of us when we realize how little we understand about life, ourselves, and the world around us.*
+## Supported Inputs
 
----
+- PDF
+- DOCX
+- EPUB
+- Markdown (`.md`)
+- Plain text (`.txt`)
 
-## The Allegory of the Cave
-
-Allegory of the Cave Allegory of the Cave Allegory of the Cave Allegory of the Cave Allegory of the Cave Allegory of the Cave
-
-> "I cannot teach anybody anything. I can only make them think."
->
-> — Socrates
+> Edit this text, then use **Create Audiobook** to queue generation in Jobs.
 ''';
 
 /// State for the text reader feature

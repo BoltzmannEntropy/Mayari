@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../services/audiobook_chunking.dart';
+import '../services/log_service.dart';
 import '../services/storage_service.dart';
 import '../services/tts_service.dart';
 import 'tts_provider.dart';
@@ -124,13 +125,18 @@ final audiobookPlaybackProvider =
 
 enum AudiobookJobStatus { queued, running, completed, failed, cancelled }
 
+enum AudiobookJobType { generation, optimizedExport }
+
 class AudiobookJob {
   final String id;
   final String title;
+  final AudiobookJobType jobType;
   final List<String> chunks;
   final String voice;
   final double speed;
   final String outputPath;
+  final String outputFormat;
+  final String? sourcePath;
   final AudiobookJobStatus status;
   final int currentChunk;
   final int totalChunks;
@@ -145,16 +151,19 @@ class AudiobookJob {
   const AudiobookJob({
     required this.id,
     required this.title,
+    required this.jobType,
     required this.chunks,
     required this.voice,
     required this.speed,
     required this.outputPath,
+    required this.outputFormat,
     required this.status,
     required this.currentChunk,
     required this.totalChunks,
     required this.progress,
     required this.message,
     required this.createdAt,
+    this.sourcePath,
     this.errorMessage,
     this.resultPath,
     this.startedAt,
@@ -164,10 +173,14 @@ class AudiobookJob {
   AudiobookJob copyWith({
     String? id,
     String? title,
+    AudiobookJobType? jobType,
     List<String>? chunks,
     String? voice,
     double? speed,
     String? outputPath,
+    String? outputFormat,
+    String? sourcePath,
+    bool clearSourcePath = false,
     AudiobookJobStatus? status,
     int? currentChunk,
     int? totalChunks,
@@ -184,10 +197,13 @@ class AudiobookJob {
     return AudiobookJob(
       id: id ?? this.id,
       title: title ?? this.title,
+      jobType: jobType ?? this.jobType,
       chunks: chunks ?? this.chunks,
       voice: voice ?? this.voice,
       speed: speed ?? this.speed,
       outputPath: outputPath ?? this.outputPath,
+      outputFormat: outputFormat ?? this.outputFormat,
+      sourcePath: clearSourcePath ? null : (sourcePath ?? this.sourcePath),
       status: status ?? this.status,
       currentChunk: currentChunk ?? this.currentChunk,
       totalChunks: totalChunks ?? this.totalChunks,
@@ -211,10 +227,13 @@ class AudiobookJob {
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
+    'jobType': jobType.name,
     'chunks': chunks,
     'voice': voice,
     'speed': speed,
     'outputPath': outputPath,
+    'outputFormat': outputFormat,
+    'sourcePath': sourcePath,
     'status': status.name,
     'currentChunk': currentChunk,
     'totalChunks': totalChunks,
@@ -239,15 +258,29 @@ class AudiobookJob {
       }
     }
 
+    AudiobookJobType jobType = AudiobookJobType.generation;
+    final jobTypeText = json['jobType'] as String?;
+    if (jobTypeText != null) {
+      for (final value in AudiobookJobType.values) {
+        if (value.name == jobTypeText) {
+          jobType = value;
+          break;
+        }
+      }
+    }
+
     return AudiobookJob(
       id: json['id'] as String,
       title: json['title'] as String,
+      jobType: jobType,
       chunks: (json['chunks'] as List<dynamic>? ?? const [])
           .map((e) => e.toString())
           .toList(),
-      voice: json['voice'] as String,
-      speed: (json['speed'] as num).toDouble(),
+      voice: (json['voice'] as String?) ?? 'bf_emma',
+      speed: (json['speed'] as num?)?.toDouble() ?? 1.0,
       outputPath: json['outputPath'] as String,
+      outputFormat: (json['outputFormat'] as String?) ?? 'wav',
+      sourcePath: json['sourcePath'] as String?,
       status: status,
       currentChunk: (json['currentChunk'] as num?)?.toInt() ?? 0,
       totalChunks: (json['totalChunks'] as num?)?.toInt() ?? 0,
@@ -270,6 +303,16 @@ class AudiobookJob {
 Future<Directory> getAudiobooksDirectory() async {
   final home = Platform.environment['HOME'] ?? '/tmp';
   final dir = Directory(p.join(home, 'Documents', 'Mayari Audiobooks'));
+  if (!dir.existsSync()) {
+    await dir.create(recursive: true);
+  }
+  return dir;
+}
+
+/// Get the default optimized-export directory.
+Future<Directory> getAudiobookExportsDirectory() async {
+  final home = Platform.environment['HOME'] ?? '/tmp';
+  final dir = Directory(p.join(home, 'Documents', 'Mayari Exports'));
   if (!dir.existsSync()) {
     await dir.create(recursive: true);
   }
@@ -362,6 +405,7 @@ class AudiobooksNotifier extends StateNotifier<List<Audiobook>> {
     final existingPaths = state.map((b) => b.path).toSet();
 
     for (final job in jobs) {
+      if (job.jobType != AudiobookJobType.generation) continue;
       if (job.status != AudiobookJobStatus.completed) continue;
       if (job.resultPath == null) continue;
       if (existingPaths.contains(job.resultPath)) continue;
@@ -412,6 +456,35 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
     _loadJobs();
   }
 
+  LogService get _log => _ref.read(logServiceProvider.notifier);
+
+  String _jobTypeLabel(AudiobookJobType type) {
+    switch (type) {
+      case AudiobookJobType.generation:
+        return 'generation';
+      case AudiobookJobType.optimizedExport:
+        return 'optimized export';
+    }
+  }
+
+  void _logJobAction(
+    String action,
+    AudiobookJob job, {
+    String? details,
+    bool asError = false,
+  }) {
+    final detailSuffix = details == null || details.isEmpty
+        ? ''
+        : ' ($details)';
+    final message =
+        '${job.id}: ${_jobTypeLabel(job.jobType)} $action - ${job.title}$detailSuffix';
+    if (asError) {
+      _log.error('Jobs', message);
+    } else {
+      _log.info('Jobs', message);
+    }
+  }
+
   Future<void> _loadJobs() async {
     try {
       final data = await _storage.loadJson(_storageKey);
@@ -430,7 +503,8 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
                         status: AudiobookJobStatus.failed,
                         progress: 0,
                         message: 'Interrupted before completion',
-                        errorMessage: 'App was closed during generation',
+                        errorMessage:
+                            'App was closed during ${_jobTypeLabel(job.jobType)}',
                         finishedAt: DateTime.now(),
                       )
                     : job,
@@ -447,10 +521,25 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
       if (recoveredCount > 0) {
         debugPrint('Recovered $recoveredCount audiobooks from completed jobs');
       }
+      final interruptedCount = recovered
+          .where(
+            (job) =>
+                job.status == AudiobookJobStatus.failed &&
+                job.errorMessage ==
+                    'App was closed during ${_jobTypeLabel(job.jobType)}',
+          )
+          .length;
+      if (interruptedCount > 0) {
+        _log.warning(
+          'Jobs',
+          'Recovered $interruptedCount interrupted jobs from previous session',
+        );
+      }
 
       unawaited(_processQueue());
     } catch (e) {
       debugPrint('Error loading audiobook jobs: $e');
+      _log.error('Jobs', 'Failed to load jobs: $e');
     }
   }
 
@@ -462,18 +551,30 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
       );
     } catch (e) {
       debugPrint('Error saving audiobook jobs: $e');
+      _log.error('Jobs', 'Failed to save jobs: $e');
     }
   }
 
-  Future<String> _buildOutputPath(String title) async {
-    final dir = await getAudiobooksDirectory();
+  String _safeTitle(String title) {
     final safeTitle = title
         .trim()
         .replaceAll(RegExp(r'[^\w\s-]'), '')
         .replaceAll(RegExp(r'\s+'), '_');
-    final baseName = safeTitle.isEmpty ? 'audiobook' : safeTitle;
+    return safeTitle.isEmpty ? 'audiobook' : safeTitle;
+  }
+
+  Future<String> _buildGenerationOutputPath(String title) async {
+    final dir = await getAudiobooksDirectory();
+    final baseName = _safeTitle(title);
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     return p.join(dir.path, '${baseName}_$timestamp.wav');
+  }
+
+  Future<String> _buildOptimizedExportPath(String title) async {
+    final dir = await getAudiobookExportsDirectory();
+    final baseName = _safeTitle(title);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return p.join(dir.path, '${baseName}_optimized_$timestamp.m4b');
   }
 
   List<String> _prepareChunksForGeneration(List<String> chunks) {
@@ -493,25 +594,64 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
     final preparedChunks = _prepareChunksForGeneration(normalizedChunks);
     if (preparedChunks.isEmpty) return;
 
-    final outputPath = await _buildOutputPath(title);
+    final outputPath = await _buildGenerationOutputPath(title);
     final job = AudiobookJob(
       id: const Uuid().v4(),
       title: title,
+      jobType: AudiobookJobType.generation,
       chunks: preparedChunks,
       voice: voice,
       speed: speed,
       outputPath: outputPath,
+      outputFormat: 'wav',
       status: AudiobookJobStatus.queued,
       currentChunk: 0,
       totalChunks: preparedChunks.length,
       progress: 0,
-      message: 'Queued',
+      message: 'Queued generation',
       createdAt: DateTime.now(),
     );
 
     state = [job, ...state];
     await _saveJobs();
+    _logJobAction('queued', job);
     unawaited(_processQueue());
+  }
+
+  Future<bool> enqueueOptimizedExport({
+    required String title,
+    required String sourcePath,
+  }) async {
+    final sourceFile = File(sourcePath);
+    if (!sourceFile.existsSync()) {
+      _log.error('Jobs', 'Optimized export source not found: $sourcePath');
+      return false;
+    }
+
+    final outputPath = await _buildOptimizedExportPath(title);
+    final job = AudiobookJob(
+      id: const Uuid().v4(),
+      title: title,
+      jobType: AudiobookJobType.optimizedExport,
+      chunks: const [],
+      voice: 'n/a',
+      speed: 1.0,
+      outputPath: outputPath,
+      outputFormat: 'm4b',
+      sourcePath: sourcePath,
+      status: AudiobookJobStatus.queued,
+      currentChunk: 0,
+      totalChunks: 1,
+      progress: 0,
+      message: 'Queued optimized export',
+      createdAt: DateTime.now(),
+    );
+
+    state = [job, ...state];
+    await _saveJobs();
+    _logJobAction('queued', job, details: 'target=${job.outputPath}');
+    unawaited(_processQueue());
+    return true;
   }
 
   Future<void> retry(String jobId) async {
@@ -522,29 +662,59 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
       return;
     }
 
-    final freshPath = await _buildOutputPath(job.title);
-    final preparedChunks = _prepareChunksForGeneration(job.chunks);
-    if (preparedChunks.isEmpty) {
-      await _markFailed(job.id, 'No usable text chunks after preprocessing');
-      return;
+    if (job.jobType == AudiobookJobType.generation) {
+      final freshPath = await _buildGenerationOutputPath(job.title);
+      final preparedChunks = _prepareChunksForGeneration(job.chunks);
+      if (preparedChunks.isEmpty) {
+        await _markFailed(job.id, 'No usable text chunks after preprocessing');
+        return;
+      }
+      _updateJob(
+        jobId,
+        (j) => j.copyWith(
+          status: AudiobookJobStatus.queued,
+          progress: 0,
+          message: 'Queued generation',
+          clearErrorMessage: true,
+          clearResultPath: true,
+          chunks: preparedChunks,
+          outputPath: freshPath,
+          outputFormat: 'wav',
+          currentChunk: 0,
+          totalChunks: preparedChunks.length,
+          startedAt: null,
+          finishedAt: null,
+        ),
+      );
+    } else {
+      final source = job.sourcePath;
+      if (source == null || source.isEmpty || !File(source).existsSync()) {
+        await _markFailed(job.id, 'Missing source file for optimized export');
+        return;
+      }
+      final freshPath = await _buildOptimizedExportPath(job.title);
+      _updateJob(
+        jobId,
+        (j) => j.copyWith(
+          status: AudiobookJobStatus.queued,
+          progress: 0,
+          message: 'Queued optimized export',
+          clearErrorMessage: true,
+          clearResultPath: true,
+          outputPath: freshPath,
+          outputFormat: 'm4b',
+          currentChunk: 0,
+          totalChunks: 1,
+          startedAt: null,
+          finishedAt: null,
+        ),
+      );
     }
-    _updateJob(
-      jobId,
-      (j) => j.copyWith(
-        status: AudiobookJobStatus.queued,
-        progress: 0,
-        message: 'Queued',
-        clearErrorMessage: true,
-        clearResultPath: true,
-        chunks: preparedChunks,
-        outputPath: freshPath,
-        currentChunk: 0,
-        totalChunks: preparedChunks.length,
-        startedAt: null,
-        finishedAt: null,
-      ),
-    );
     await _saveJobs();
+    final queuedJob = _findJob(jobId);
+    if (queuedJob != null) {
+      _logJobAction('re-queued', queuedJob);
+    }
     unawaited(_processQueue());
   }
 
@@ -560,6 +730,10 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
       ),
     );
     await _saveJobs();
+    final cancelled = _findJob(jobId);
+    if (cancelled != null) {
+      _logJobAction('cancelled', cancelled);
+    }
   }
 
   Future<void> remove(String jobId) async {
@@ -567,6 +741,7 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
     if (job == null || job.status == AudiobookJobStatus.running) return;
     state = state.where((j) => j.id != jobId).toList();
     await _saveJobs();
+    _logJobAction('removed', job);
   }
 
   AudiobookJob? _nextQueuedJob() {
@@ -606,9 +781,13 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
       ),
     );
     await _saveJobs();
+    final failed = _findJob(id);
+    if (failed != null) {
+      _logJobAction('failed', failed, details: message, asError: true);
+    }
   }
 
-  Future<void> _runJob(AudiobookJob job) async {
+  Future<void> _runGenerationJob(AudiobookJob job) async {
     final service = _ref.read(ttsServiceProvider);
 
     _updateJob(
@@ -624,6 +803,10 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
       ),
     );
     await _saveJobs();
+    final running = _findJob(job.id);
+    if (running != null) {
+      _logJobAction('started', running);
+    }
 
     _progressSubscription?.cancel();
     _progressSubscription = service.audiobookProgress.listen((progress) {
@@ -686,6 +869,7 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
           message: 'Completed',
           clearErrorMessage: true,
           resultPath: result.path,
+          outputFormat: result.format,
           currentChunk: result.chunks,
           totalChunks: result.chunks,
           finishedAt: DateTime.now(),
@@ -693,11 +877,126 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
         ),
       );
       await _saveJobs();
+      final completed = _findJob(job.id);
+      if (completed != null) {
+        _logJobAction('completed', completed, details: result.path);
+      }
     } catch (e) {
       await _progressSubscription?.cancel();
       _progressSubscription = null;
       await _markFailed(job.id, e.toString());
     }
+  }
+
+  Future<void> _runOptimizedExportJob(AudiobookJob job) async {
+    _updateJob(
+      job.id,
+      (j) => j.copyWith(
+        status: AudiobookJobStatus.running,
+        message: 'Preparing optimized export...',
+        clearErrorMessage: true,
+        startedAt: DateTime.now(),
+        finishedAt: null,
+        currentChunk: 0,
+        totalChunks: 1,
+        progress: 0,
+      ),
+    );
+    await _saveJobs();
+    final running = _findJob(job.id);
+    if (running != null) {
+      _logJobAction('started', running, details: 'target=${job.outputPath}');
+    }
+
+    final sourcePath = job.sourcePath;
+    if (sourcePath == null || sourcePath.isEmpty) {
+      await _markFailed(job.id, 'Missing source path for optimized export');
+      return;
+    }
+
+    final sourceFile = File(sourcePath);
+    if (!sourceFile.existsSync()) {
+      await _markFailed(job.id, 'Source file not found: $sourcePath');
+      return;
+    }
+
+    try {
+      await File(job.outputPath).parent.create(recursive: true);
+
+      String finalPath = job.outputPath;
+      String finalFormat = job.outputFormat;
+      bool usedFallback = false;
+
+      if (!kIsWeb && Platform.isMacOS) {
+        final conversion = await Process.run('afconvert', [
+          '-f',
+          'm4af',
+          '-d',
+          'aac',
+          '-q',
+          '127',
+          sourcePath,
+          job.outputPath,
+        ]);
+        final convertedFile = File(job.outputPath);
+        if (conversion.exitCode != 0 || !convertedFile.existsSync()) {
+          usedFallback = true;
+        }
+      } else {
+        usedFallback = true;
+      }
+
+      if (usedFallback) {
+        final fallbackPath = p.setExtension(job.outputPath, '.wav');
+        await sourceFile.copy(fallbackPath);
+        finalPath = fallbackPath;
+        finalFormat = 'wav';
+      }
+
+      final exportedFile = File(finalPath);
+      if (!exportedFile.existsSync() || exportedFile.lengthSync() < 1024) {
+        await _markFailed(job.id, 'Optimized export output is empty');
+        return;
+      }
+
+      final message = usedFallback
+          ? 'Optimized export completed (WAV fallback)'
+          : 'Optimized export completed';
+
+      _updateJob(
+        job.id,
+        (j) => j.copyWith(
+          status: AudiobookJobStatus.completed,
+          progress: 1,
+          message: message,
+          clearErrorMessage: true,
+          resultPath: finalPath,
+          outputFormat: finalFormat,
+          currentChunk: 1,
+          totalChunks: 1,
+          finishedAt: DateTime.now(),
+        ),
+      );
+      await _saveJobs();
+      final completed = _findJob(job.id);
+      if (completed != null) {
+        _logJobAction(
+          'completed',
+          completed,
+          details: '$finalFormat -> $finalPath',
+        );
+      }
+    } catch (e) {
+      await _markFailed(job.id, e.toString());
+    }
+  }
+
+  Future<void> _runJob(AudiobookJob job) async {
+    if (job.jobType == AudiobookJobType.optimizedExport) {
+      await _runOptimizedExportJob(job);
+      return;
+    }
+    await _runGenerationJob(job);
   }
 
   Future<void> _processQueue() async {

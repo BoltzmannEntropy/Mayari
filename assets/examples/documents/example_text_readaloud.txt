@@ -1,0 +1,5 @@
+Mayari plain text sample.
+
+This TXT file validates text reader import and read-aloud playback.
+
+Audiobook generation from this file should be queued in Jobs.

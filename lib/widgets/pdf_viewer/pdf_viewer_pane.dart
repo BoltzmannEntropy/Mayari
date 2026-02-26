@@ -1018,7 +1018,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Drop a PDF, DOCX, or EPUB file to open it'),
+            content: Text('Drop a PDF, DOCX, EPUB, MD, or TXT file to open it'),
           ),
         );
       }
@@ -1054,7 +1054,7 @@ class _PdfViewerPaneState extends ConsumerState<PdfViewerPane> {
               Icon(Icons.picture_as_pdf, size: 64, color: Colors.grey),
               SizedBox(height: 16),
               Text(
-                'Open a PDF to get started\nor drop one here',
+                'Open a document to get started\nor drop one here',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),

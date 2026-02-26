@@ -7,7 +7,7 @@
     <a href="https://github.com/BoltzmannEntropy/Mayari"><strong>GitHub</strong></a>
   </p>
   <p>
-    <a href="https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.5/Mayari-1.0.5.dmg">
+    <a href="https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.6/Mayari-1.0.6.dmg">
       <img alt="Download for OSX" src="https://img.shields.io/badge/Download%20for-OSX-7C3AED?style=for-the-badge&logo=apple&logoColor=white">
     </a>
   </p>
@@ -44,7 +44,7 @@ KokoroSwift + Apple MLX
 Apple Silicon GPU
 ```
 
-No HTTP servers. No API endpoints. Pure native communication via Flutter MethodChannels.
+Core playback uses no app-internal HTTP server. The Flutter app communicates with native code through MethodChannels.
 
 ## Screenshot
 
@@ -67,7 +67,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 | **PDF Workspace** | Three-pane layout: library sidebar, PDF/Text pane, quotes panel |
 | **Quote Capture** | Select text → `Cmd+D` to save with page number |
 | **Highlight Mode** | `Cmd+H` to auto-capture all selections |
-| **Text-to-Speech** | 8 British voices, speed control, play/pause/stop |
+| **Text-to-Speech** | 54 Kokoro voices across 9 language catalogs, speed control, play/pause/stop |
 | **Audiobook Jobs Queue** | Background queue with progress, retry/cancel, and saved outputs |
 | **Export** | Markdown export with formatted citations |
 | **Text Reader** | Edit/view markdown documents with TTS |
@@ -86,7 +86,7 @@ No HTTP servers. No API endpoints. Pure native communication via Flutter MethodC
 
 ### From DMG (Recommended)
 
-1. Download [`Mayari-1.0.5.dmg`](https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.5/Mayari-1.0.5.dmg)
+1. Download [`Mayari-1.0.6.dmg`](https://github.com/BoltzmannEntropy/Mayari/releases/download/v1.0.6/Mayari-1.0.6.dmg)
 2. Open DMG and drag Mayari to Applications
 3. Right-click → Open (first launch only, for Gatekeeper)
 4. TTS model (~340MB) downloads automatically on first use
@@ -110,7 +110,13 @@ This is an early alpha version intended for testing and development. Features ma
 
 ### ✎ Unsigned Build
 
-This macOS build is not signed by Apple. You may need to right-click the app and select "Open" the first time you run it, or go to System Settings → Privacy & Security to allow it.
+As of February 26, 2026, the distributed DMG is unsigned/not notarized by Apple.
+
+1. Open the DMG and drag `Mayari.app` to `Applications`.
+2. In `Applications`, right-click `Mayari.app` and choose `Open`.
+3. Click `Open` in the warning dialog.
+4. If launch is still blocked, go to `System Settings -> Privacy & Security`.
+5. Click `Open Anyway` for Mayari and confirm with password/Touch ID.
 
 ## Text-to-Speech
 
@@ -121,18 +127,25 @@ Mayari uses **KokoroSwift**, a native Swift port of the Kokoro TTS model:
 - **Sample Rate**: 24kHz
 - **Performance**: ~320MB RAM, 1.7-2.4s for 7-8s audio
 
-### Voices
+### Voices (Complete Catalog)
 
-| ID | Name | Gender | Grade |
-|----|------|--------|-------|
-| `bf_emma` | Emma | Female | B- (default) |
-| `bf_isabella` | Isabella | Female | C |
-| `bf_alice` | Alice | Female | D |
-| `bf_lily` | Lily | Female | D |
-| `bm_george` | George | Male | C |
-| `bm_fable` | Fable | Male | C |
-| `bm_lewis` | Lewis | Male | D+ |
-| `bm_daniel` | Daniel | Male | D |
+Mayari currently exposes **54 voices** across **9 language catalogs**:
+
+| Language | Count | Voice IDs |
+|----------|-------|-----------|
+| English (US) | 20 | `af_alloy`, `af_aoede`, `af_bella`, `af_heart`, `af_jessica`, `af_kore`, `af_nicole`, `af_nova`, `af_river`, `af_sarah`, `af_sky`, `am_adam`, `am_echo`, `am_eric`, `am_fenrir`, `am_liam`, `am_michael`, `am_onyx`, `am_puck`, `am_santa` |
+| English (UK) | 8 | `bf_alice`, `bf_emma` (default), `bf_isabella`, `bf_lily`, `bm_daniel`, `bm_fable`, `bm_george`, `bm_lewis` |
+| Spanish | 3 | `ef_dora`, `em_alex`, `em_santa` |
+| French | 1 | `ff_siwis` |
+| Hindi | 4 | `hf_alpha`, `hf_beta`, `hm_omega`, `hm_psi` |
+| Italian | 2 | `if_sara`, `im_nicola` |
+| Japanese | 5 | `jf_alpha`, `jf_gongitsune`, `jf_nezumi`, `jf_tebukuro`, `jm_kumo` |
+| Brazilian Portuguese | 3 | `pf_dora`, `pm_alex`, `pm_santa` |
+| Mandarin Chinese | 8 | `zf_xiaobei`, `zf_xiaoni`, `zf_xiaoxiao`, `zf_xiaoyi`, `zm_yunjian`, `zm_yunxi`, `zm_yunxia`, `zm_yunyang` |
+
+Canonical runtime definitions:
+- `lib/services/tts_service.dart` (`defaultVoices`)
+- `macos/Runner/KokoroTTSPlugin.swift` (`kokoroVoices`)
 
 ### Model Files
 
@@ -257,6 +270,10 @@ ios/
 ├── Runner/                iOS app target
 ├── ExportOptions.plist    IPA export settings
 └── Runner/PrivacyInfo.xcprivacy
+
+bin/
+├── mayarictl              App + MCP control script
+└── mayari_mcp_server.py   MCP JSON-RPC/HTTP bridge
 ```
 
 ## Native Plugin
@@ -272,6 +289,27 @@ ios/
 | `getModelStatus` | Check load state |
 
 Communication via `MethodChannel("com.mayari.tts")`.
+
+## MCP Integration (Optional Companion Server)
+
+Mayari includes an optional MCP bridge for Claude/agent integrations:
+
+- Script: `bin/mayari_mcp_server.py`
+- Protocol: JSON-RPC 2.0 over HTTP (`initialize`, `tools/list`, `tools/call`)
+- Default bind: `127.0.0.1:8086`
+- Logs: `runs/logs/mayari_mcp_server.log`
+
+Run:
+
+```bash
+python3 bin/mayari_mcp_server.py --host 127.0.0.1 --port 8086
+```
+
+Environment:
+
+- `MAYARI_MCP_HOST`
+- `MAYARI_MCP_PORT`
+- `MAYARI_BACKEND_URL` (optional health-probe target)
 
 ## Building
 

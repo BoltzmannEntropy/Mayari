@@ -45,6 +45,10 @@ class DocumentTextExtractor {
         return _extractDocx(filePath, bytes);
       case SupportedDocumentType.epub:
         return _extractEpub(filePath, bytes);
+      case SupportedDocumentType.markdown:
+        return _extractMarkdown(filePath, bytes);
+      case SupportedDocumentType.text:
+        return _extractPlainText(filePath, bytes);
       case SupportedDocumentType.unknown:
         throw UnsupportedError(
           'Unsupported document type: ${p.extension(filePath)}',
@@ -182,6 +186,26 @@ class DocumentTextExtractor {
     );
   }
 
+  DocumentExtractionResult _extractPlainText(String filePath, List<int> bytes) {
+    final rawText = utf8.decode(bytes, allowMalformed: true);
+    return DocumentExtractionResult(
+      path: filePath,
+      type: SupportedDocumentType.text,
+      plainText: _normalizeBlockText(rawText),
+      title: p.basenameWithoutExtension(filePath),
+    );
+  }
+
+  DocumentExtractionResult _extractMarkdown(String filePath, List<int> bytes) {
+    final rawText = utf8.decode(bytes, allowMalformed: true);
+    return DocumentExtractionResult(
+      path: filePath,
+      type: SupportedDocumentType.markdown,
+      plainText: _normalizeBlockText(_stripMarkdownForReadAloud(rawText)),
+      title: p.basenameWithoutExtension(filePath),
+    );
+  }
+
   String _extractDocxParagraph(XmlElement paragraph) {
     final buffer = StringBuffer();
     for (final node in paragraph.descendants.whereType<XmlNode>()) {
@@ -218,6 +242,26 @@ class DocumentTextExtractor {
     return _normalizeInlineText(
       document.body?.text ?? document.documentElement?.text ?? '',
     );
+  }
+
+  String _stripMarkdownForReadAloud(String markdown) {
+    var text = markdown;
+    text = text.replaceAll(RegExp(r'```[\s\S]*?```'), ' ');
+    text = text.replaceAllMapped(
+      RegExp(r'`([^`]+)`'),
+      (match) => match.group(1) ?? '',
+    );
+    text = text.replaceAll(RegExp(r'!\[([^\]]*)\]\([^)]+\)'), '');
+    text = text.replaceAllMapped(
+      RegExp(r'\[([^\]]+)\]\([^)]+\)'),
+      (match) => match.group(1) ?? '',
+    );
+    text = text.replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '');
+    text = text.replaceAll(RegExp(r'^>\s*', multiLine: true), '');
+    text = text.replaceAll(RegExp(r'^[-*_]{3,}\s*$', multiLine: true), '');
+    text = text.replaceAll(RegExp(r'(\*\*|__)(.*?)\1'), r'$2');
+    text = text.replaceAll(RegExp(r'(\*|_)(.*?)\1'), r'$2');
+    return text;
   }
 
   String? _resolveEpubOpfPath(Archive archive) {

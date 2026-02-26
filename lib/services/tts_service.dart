@@ -749,10 +749,14 @@ class TtsService {
     String savePath, {
     void Function(double progress)? onProgress,
   }) async {
+    http.Client? client;
+    IOSink? sink;
     try {
-      final client = http.Client();
+      client = http.Client();
       final request = http.Request('GET', Uri.parse(url));
-      final response = await client.send(request);
+      final response = await client
+          .send(request)
+          .timeout(const Duration(seconds: 90));
 
       if (response.statusCode != 200) {
         debugPrint('TTS: Download failed with status ${response.statusCode}');
@@ -763,7 +767,7 @@ class TtsService {
       var downloadedBytes = 0;
 
       final file = File(savePath);
-      final sink = file.openWrite();
+      sink = file.openWrite();
 
       await for (final chunk in response.stream) {
         sink.add(chunk);
@@ -775,13 +779,16 @@ class TtsService {
         }
       }
 
-      await sink.close();
-      client.close();
-
       return true;
+    } on TimeoutException {
+      debugPrint('TTS: Download timed out: $url');
+      return false;
     } catch (e) {
       debugPrint('TTS: File download error: $e');
       return false;
+    } finally {
+      await sink?.close();
+      client?.close();
     }
   }
 

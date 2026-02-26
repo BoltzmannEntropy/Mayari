@@ -55,7 +55,7 @@ enum _BottomDeckView { jobs, audiobooks }
 
 enum _LibraryMenuAction { examples }
 
-/// Main navigation shell with tabs for Reader and Settings
+/// Main navigation shell with tabs for Read Aloud and Settings
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
@@ -108,7 +108,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                       NavigationRailDestination(
                         icon: Icon(Icons.menu_book_outlined),
                         selectedIcon: Icon(Icons.menu_book),
-                        label: Text('Reader'),
+                        label: Text('Read Aloud'),
                       ),
                       NavigationRailDestination(
                         icon: Icon(Icons.settings_outlined),
@@ -248,7 +248,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Open a folder\nwith PDF, DOCX, or EPUB',
+              'Open a folder\nwith PDF, DOCX, EPUB, MD, or TXT',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
@@ -319,6 +319,12 @@ class _MainShellState extends ConsumerState<MainShell> {
             break;
           case SupportedDocumentType.epub:
             icon = Icons.menu_book;
+            break;
+          case SupportedDocumentType.markdown:
+            icon = Icons.description_outlined;
+            break;
+          case SupportedDocumentType.text:
+            icon = Icons.text_snippet_outlined;
             break;
           case SupportedDocumentType.unknown:
             icon = Icons.insert_drive_file_outlined;
@@ -407,7 +413,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         .read(sourcesProvider.notifier)
         .ensureSourceForFile(filePath);
     ref.read(activeSourceIdProvider.notifier).state = source.id;
-    // Switch to Reader view when opening a PDF
+    // Switch to Read Aloud workspace when opening a document
     if (_selectedIndex != 0) {
       setState(() => _selectedIndex = 0);
     }
@@ -463,7 +469,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Examples loaded: PDF, DOCX, EPUB and ready-made audiobooks.',
+              'Examples loaded: PDF, DOCX, EPUB, MD, TXT and ready-made audiobooks.',
             ),
             duration: Duration(seconds: 3),
           ),

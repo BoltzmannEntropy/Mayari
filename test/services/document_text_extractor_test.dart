@@ -51,4 +51,26 @@ void main() {
     expect(compact, contains('inthebeginning'));
     expect(result.paragraphs, isNotEmpty);
   });
+
+  test('extracts text from sample Markdown', () async {
+    final path = p.join(docsDir, 'example_markdown_readaloud.md');
+    final result = await extractor.extractFromFile(path);
+
+    expect(result.type, SupportedDocumentType.markdown);
+    expect(result.plainText.toLowerCase(), contains('default read aloud text'));
+    expect(result.plainText, isNot(contains('#')));
+    expect(result.paragraphs, isNotEmpty);
+  });
+
+  test('extracts text from sample TXT', () async {
+    final path = p.join(docsDir, 'example_text_readaloud.txt');
+    final result = await extractor.extractFromFile(path);
+
+    expect(result.type, SupportedDocumentType.text);
+    expect(
+      result.plainText.toLowerCase(),
+      contains('txt file validates text reader import'),
+    );
+    expect(result.paragraphs, isNotEmpty);
+  });
 }

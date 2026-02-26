@@ -1,13 +1,37 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/audiobook_provider.dart';
 
-class AudiobookJobsPanel extends ConsumerWidget {
+class AudiobookJobsPanel extends ConsumerStatefulWidget {
   const AudiobookJobsPanel({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AudiobookJobsPanel> createState() => _AudiobookJobsPanelState();
+}
+
+class _AudiobookJobsPanelState extends ConsumerState<AudiobookJobsPanel> {
+  late final Timer _ticker;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final jobs = ref.watch(audiobookJobsProvider);
     final theme = Theme.of(context);
 
@@ -62,7 +86,7 @@ class AudiobookJobsPanel extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemCount: jobs.length,
                     itemBuilder: (context, index) {
-                      return _JobCard(job: jobs[index]);
+                      return _JobCard(job: jobs[index], now: _now);
                     },
                   ),
           ),
@@ -73,14 +97,31 @@ class AudiobookJobsPanel extends ConsumerWidget {
 }
 
 class _JobCard extends ConsumerWidget {
-  const _JobCard({required this.job});
+  const _JobCard({required this.job, required this.now});
 
   final AudiobookJob job;
+  final DateTime now;
+
+  String _formatTime(DateTime dateTime) {
+    final hh = dateTime.hour.toString().padLeft(2, '0');
+    final mm = dateTime.minute.toString().padLeft(2, '0');
+    final ss = dateTime.second.toString().padLeft(2, '0');
+    return '$hh:$mm:$ss';
+  }
+
+  String _formatElapsed(Duration duration) {
+    final seconds = duration.inSeconds < 0 ? 0 : duration.inSeconds;
+    return '${seconds}s';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final notifier = ref.read(audiobookJobsProvider.notifier);
+    final kindLabel = switch (job.jobType) {
+      AudiobookJobType.generation => 'Generate',
+      AudiobookJobType.optimizedExport => 'Export',
+    };
     final statusColor = switch (job.status) {
       AudiobookJobStatus.queued => Colors.grey,
       AudiobookJobStatus.running => theme.colorScheme.primary,
@@ -96,6 +137,15 @@ class _JobCard extends ConsumerWidget {
       AudiobookJobStatus.failed => 'Failed',
       AudiobookJobStatus.cancelled => 'Cancelled',
     };
+    final startTime = job.startedAt ?? job.createdAt;
+    final endTime = job.finishedAt ?? now;
+    final elapsed = endTime.difference(startTime);
+    final timerLabel =
+        '${job.startedAt == null ? 'Queued' : 'Started'} '
+        '${_formatTime(startTime)}'
+        ' · '
+        '${job.isTerminal ? 'elapsed' : '+'}${_formatElapsed(elapsed)}';
+    final pathToDisplay = job.resultPath ?? job.outputPath;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -118,6 +168,18 @@ class _JobCard extends ConsumerWidget {
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  kindLabel,
+                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
                 ),
               ),
               const SizedBox(width: 8),
@@ -150,10 +212,29 @@ class _JobCard extends ConsumerWidget {
             const SizedBox(height: 6),
           ],
           Text(
+            timerLabel,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 10,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
             job.message.isEmpty ? statusLabel : job.message,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 11,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            pathToDisplay,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 10,
+              fontFamily: 'monospace',
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

@@ -1,8 +1,15 @@
 import 'package:path/path.dart' as p;
 
-enum SupportedDocumentType { pdf, docx, epub, unknown }
+enum SupportedDocumentType { pdf, docx, epub, markdown, text, unknown }
 
-const Set<String> supportedDocumentExtensions = {'.pdf', '.docx', '.epub'};
+const Set<String> supportedDocumentExtensions = {
+  '.pdf',
+  '.docx',
+  '.epub',
+  '.md',
+  '.markdown',
+  '.txt',
+};
 
 SupportedDocumentType documentTypeFromPath(String filePath) {
   final ext = p.extension(filePath).toLowerCase();
@@ -13,6 +20,11 @@ SupportedDocumentType documentTypeFromPath(String filePath) {
       return SupportedDocumentType.docx;
     case '.epub':
       return SupportedDocumentType.epub;
+    case '.md':
+    case '.markdown':
+      return SupportedDocumentType.markdown;
+    case '.txt':
+      return SupportedDocumentType.text;
     default:
       return SupportedDocumentType.unknown;
   }

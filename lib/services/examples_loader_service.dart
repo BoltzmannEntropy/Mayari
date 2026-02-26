@@ -114,6 +114,22 @@ class ExamplesLoaderService {
       year: 2026,
       publisher: 'Mayari Examples',
     ),
+    ExampleDocumentSeed(
+      assetPath: 'assets/examples/documents/example_markdown_readaloud.md',
+      fileName: 'example_markdown_readaloud.md',
+      title: 'Mayari Markdown Read Aloud Sample',
+      author: 'Mayari Team',
+      year: 2026,
+      publisher: 'Mayari Examples',
+    ),
+    ExampleDocumentSeed(
+      assetPath: 'assets/examples/documents/example_text_readaloud.txt',
+      fileName: 'example_text_readaloud.txt',
+      title: 'Mayari Text Read Aloud Sample',
+      author: 'Mayari Team',
+      year: 2026,
+      publisher: 'Mayari Examples',
+    ),
   ];
 
   static const List<ExampleAudiobookSeed> _audiobookSeeds = [

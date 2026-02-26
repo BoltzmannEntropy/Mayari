@@ -9,6 +9,11 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PID_DIR="$ROOT_DIR/.pids"
 LOG_DIR="$ROOT_DIR/.logs"
 APP_FILENAME_FILE="$ROOT_DIR/macos/Flutter/ephemeral/.app_filename"
+MCP_SERVER_SCRIPT="$SCRIPT_DIR/mayari_mcp_server.py"
+MCP_PID_FILE="$PID_DIR/mcp.pid"
+MCP_LOG_FILE="$LOG_DIR/mcp.log"
+MCP_HOST="${MAYARI_MCP_HOST:-127.0.0.1}"
+MCP_PORT="${MAYARI_MCP_PORT:-8086}"
 
 # Colors
 RED='\033[0;31m'
@@ -18,6 +23,15 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 mkdir -p "$PID_DIR" "$LOG_DIR"
+
+read_version_from_pubspec() {
+    local pubspec="$ROOT_DIR/pubspec.yaml"
+    if [ ! -f "$pubspec" ]; then
+        echo "0.0.0+0"
+        return 0
+    fi
+    grep '^version:' "$pubspec" | head -1 | cut -d':' -f2 | xargs
+}
 
 # ============== Flutter Functions ==============
 
@@ -95,6 +109,17 @@ is_running() {
     pgrep -f "mayari_temp.app/Contents/MacOS" >/dev/null 2>&1
 }
 
+is_mcp_running() {
+    if [ -f "$MCP_PID_FILE" ]; then
+        local pid
+        pid=$(cat "$MCP_PID_FILE")
+        if kill -0 "$pid" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 sign_app_bundle() {
     local app_path="$1"
     local frameworks_dir="$app_path/Contents/Frameworks"
@@ -170,6 +195,41 @@ stop_flutter() {
     echo -e "${GREEN}Mayari stopped${NC}"
 }
 
+start_mcp() {
+    if [ ! -f "$MCP_SERVER_SCRIPT" ]; then
+        echo -e "${YELLOW}MCP server script not found: $MCP_SERVER_SCRIPT${NC}"
+        return 1
+    fi
+    if is_mcp_running; then
+        echo "MCP server already running [PID: $(cat "$MCP_PID_FILE")]"
+        return 0
+    fi
+    echo -e "${BLUE}Starting MCP server on ${MCP_HOST}:${MCP_PORT}...${NC}"
+    python3 "$MCP_SERVER_SCRIPT" \
+        --host "$MCP_HOST" \
+        --port "$MCP_PORT" \
+        > "$MCP_LOG_FILE" 2>&1 &
+    echo $! > "$MCP_PID_FILE"
+    sleep 1
+    if kill -0 "$(cat "$MCP_PID_FILE")" >/dev/null 2>&1; then
+        echo -e "${GREEN}MCP server started${NC}"
+    else
+        echo -e "${RED}Failed to start MCP server${NC}"
+        rm -f "$MCP_PID_FILE"
+        return 1
+    fi
+}
+
+stop_mcp() {
+    if [ -f "$MCP_PID_FILE" ]; then
+        kill "$(cat "$MCP_PID_FILE")" 2>/dev/null || true
+        rm -f "$MCP_PID_FILE"
+        echo -e "${GREEN}MCP server stopped${NC}"
+    else
+        echo "MCP server is not running"
+    fi
+}
+
 build_flutter() {
     echo -e "${BLUE}Building Mayari...${NC}"
     cd "$ROOT_DIR"
@@ -198,14 +258,17 @@ cmd_up() {
         stop_flutter
     fi
     start_flutter "$flutter_mode"
+    start_mcp || true
     echo ""
     echo -e "${GREEN}=== Mayari Ready ===${NC}"
     echo "TTS uses native KokoroSwift (no server required)"
     echo "Model downloads automatically on first use (~340MB)"
+    echo "MCP server: http://${MCP_HOST}:${MCP_PORT}"
 }
 
 cmd_down() {
     echo -e "${BLUE}=== Stopping Mayari ===${NC}"
+    stop_mcp || true
     stop_flutter
     echo -e "${GREEN}=== Mayari Stopped ===${NC}"
 }
@@ -233,19 +296,51 @@ cmd_status() {
     fi
 
     echo ""
+    if is_mcp_running; then
+        echo -e "${GREEN}●${NC} MCP Server: ${GREEN}RUNNING${NC} [PID: $(cat "$MCP_PID_FILE")]"
+        echo "   URL: http://${MCP_HOST}:${MCP_PORT}"
+    else
+        echo -e "${RED}○${NC} MCP Server: ${RED}STOPPED${NC}"
+    fi
+
+    echo ""
     echo -e "${GREEN}TTS Engine:${NC} Native KokoroSwift (no server)"
     echo -e "${GREEN}Requirements:${NC} macOS 15.0+, Apple Silicon"
 }
 
 cmd_logs() {
+    local target="${1:-app}"
     local log_file="$LOG_DIR/flutter.log"
+    if [ "$target" = "mcp" ]; then
+        log_file="$MCP_LOG_FILE"
+    fi
 
     if [ -f "$log_file" ]; then
         echo "Tailing $log_file (Ctrl+C to exit)..."
         tail -f "$log_file"
     else
         echo "Log file not found: $log_file"
-        echo "Run 'mayarictl up --dev' to generate logs"
+        if [ "$target" = "mcp" ]; then
+            echo "Run 'mayarictl mcp-up' to generate MCP logs"
+        else
+            echo "Run 'mayarictl up --dev' to generate app logs"
+        fi
+    fi
+}
+
+cmd_mcp_up() {
+    start_mcp
+}
+
+cmd_mcp_down() {
+    stop_mcp
+}
+
+cmd_mcp_status() {
+    if is_mcp_running; then
+        echo "MCP server running [PID: $(cat "$MCP_PID_FILE")] at http://${MCP_HOST}:${MCP_PORT}"
+    else
+        echo "MCP server stopped"
     fi
 }
 
@@ -264,8 +359,11 @@ ${GREEN}Commands:${NC}
     down             Stop Mayari
     restart          Restart Mayari
     status           Show status
+    mcp-up           Start MCP server only
+    mcp-down         Stop MCP server only
+    mcp-status       Show MCP server status
     build            Build macOS release app
-    logs             Tail logs
+    logs [app|mcp]   Tail app or MCP logs
     clean            Clean logs and PID files
     version          Show version info
 
@@ -274,6 +372,7 @@ ${GREEN}Examples:${NC}
     mayarictl up --dev  # Start in dev mode
     mayarictl status    # Check if running
     mayarictl logs      # Tail Flutter logs
+    mayarictl logs mcp  # Tail MCP server logs
 
 ${GREEN}Notes:${NC}
     TTS runs natively via KokoroSwift (no Python/server required)
@@ -291,7 +390,10 @@ case "${1:-}" in
     restart) shift; cmd_down; sleep 1; cmd_up "$@" ;;
     status) cmd_status ;;
     build) build_flutter ;;
-    logs) cmd_logs ;;
+    logs) shift; cmd_logs "$@" ;;
+    mcp-up) cmd_mcp_up ;;
+    mcp-down) cmd_mcp_down ;;
+    mcp-status) cmd_mcp_status ;;
     clean)
         echo -e "${BLUE}Cleaning temporary files...${NC}"
         rm -f "$LOG_DIR"/*.log 2>/dev/null || true
@@ -299,8 +401,14 @@ case "${1:-}" in
         echo -e "${GREEN}Cleaned.${NC}"
         ;;
     version)
+        VERSION_RAW="$(read_version_from_pubspec)"
+        APP_VERSION="${VERSION_RAW%%+*}"
+        BUILD_NUMBER="${VERSION_RAW##*+}"
+        if [ "$APP_VERSION" = "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="0"
+        fi
         echo -e "${BLUE}Mayari - PDF Quote Extraction with Native TTS${NC}"
-        echo "Version: 1.0.2"
+        echo "Version: $APP_VERSION (build $BUILD_NUMBER)"
         echo "Root: $ROOT_DIR"
         echo ""
         echo "Components:"

@@ -76,7 +76,11 @@ info "Sync website: $SYNC_WEBSITE"
 echo ""
 
 info "Building DMG..."
-"$SCRIPT_DIR/build-dmg.sh"
+if [ -x "$SCRIPT_DIR/build_dmg.sh" ]; then
+    "$SCRIPT_DIR/build_dmg.sh"
+else
+    "$SCRIPT_DIR/build-dmg.sh"
+fi
 
 DMG_NAME="${APP_NAME}-${VERSION}.dmg"
 DMG_PATH="$PROJECT_DIR/dist/$DMG_NAME"
@@ -144,49 +148,22 @@ if [ "$UPLOAD_TO_GITHUB" = true ]; then
 
     cd "$PROJECT_DIR"
     TAG="v$VERSION"
+    RELEASE_NOTES_FILE="$PROJECT_DIR/RELEASE_NOTES.md"
 
-    # Check if release exists, create if not
+    # Check if release exists, create if not. Keep notes synchronized with RELEASE_NOTES.md.
     if ! gh release view "$TAG" &> /dev/null; then
         info "Creating release $TAG..."
         gh release create "$TAG" \
             --title "$APP_NAME $VERSION" \
-            --notes "## $APP_NAME $VERSION
-
-### Features
-- PDF document viewing with smooth navigation
-- Native text-to-speech using KokoroSwift (no Python required)
-- 8 British English voices
-- Dual-provider licensing (BSL + Binary License)
-
-### Installation
-1. Download the DMG file
-2. Open it and drag Mayari to Applications
-3. On first launch, right-click and select Open (macOS Gatekeeper)
-4. TTS model (~340MB) downloads automatically on first use
-
-### System Requirements
-- macOS 15.0+ (Sequoia) - required for MLX framework
-- Apple Silicon (M1/M2/M3/M4)
-- ~400MB disk space (app + TTS model)
-
-### Checksums
-\`\`\`
-$SHA256
-\`\`\`
-
-### Release Assets
-- ${APP_NAME}-${VERSION}.dmg
-- ${APP_NAME}-${VERSION}.dmg.sha256
-- ${APP_NAME}-${VERSION}-source.zip
-- ${APP_NAME}-${VERSION}-source.zip.sha256
-- ${APP_NAME}-${VERSION}-RELEASE_NOTES.md
-- ${APP_NAME}-${VERSION}-RELEASE_NOTES.md.sha256
-
----
-Generated with [Claude Code](https://claude.ai/code)
-" \
+            --notes-file "$RELEASE_NOTES_FILE" \
             --draft
         ok "Release $TAG created as draft"
+    else
+        info "Updating release notes/title for $TAG..."
+        gh release edit "$TAG" \
+            --title "$APP_NAME $VERSION" \
+            --notes-file "$RELEASE_NOTES_FILE"
+        ok "Release $TAG metadata updated"
     fi
 
     # Upload required release assets
