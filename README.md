@@ -113,10 +113,18 @@ This is an early alpha version intended for testing and development. Features ma
 As of February 26, 2026, the distributed DMG is unsigned/not notarized by Apple.
 
 1. Open the DMG and drag `Mayari.app` to `Applications`.
-2. In `Applications`, right-click `Mayari.app` and choose `Open`.
-3. Click `Open` in the warning dialog.
-4. If launch is still blocked, go to `System Settings -> Privacy & Security`.
-5. Click `Open Anyway` for Mayari and confirm with password/Touch ID.
+2. Remove the quarantine attribute by running one of these commands in Terminal:
+   ```bash
+   # If installed to /Applications (system-wide):
+   xattr -d com.apple.quarantine /Applications/Mayari.app
+
+   # If installed to ~/Applications (user-only):
+   xattr -d com.apple.quarantine ~/Applications/Mayari.app
+   ```
+3. In `Applications`, right-click `Mayari.app` and choose `Open`.
+4. Click `Open` in the warning dialog.
+5. If launch is still blocked, go to `System Settings -> Privacy & Security`.
+6. Click `Open Anyway` for Mayari and confirm with password/Touch ID.
 
 ## Text-to-Speech
 
