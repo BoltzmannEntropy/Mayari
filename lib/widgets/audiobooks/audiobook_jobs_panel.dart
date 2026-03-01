@@ -54,7 +54,7 @@ class _AudiobookJobsPanelState extends ConsumerState<AudiobookJobsPanel> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Jobs',
+                  'Jobs History',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -118,6 +118,7 @@ class _JobCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final notifier = ref.read(audiobookJobsProvider.notifier);
+    final playback = ref.read(audiobookPlaybackProvider.notifier);
     final kindLabel = switch (job.jobType) {
       AudiobookJobType.generation => 'Generate',
       AudiobookJobType.optimizedExport => 'Export',
@@ -229,15 +230,13 @@ class _JobCard extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
-          Text(
+          SelectableText(
             pathToDisplay,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 10,
               fontFamily: 'monospace',
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
           if (job.errorMessage != null && job.errorMessage!.isNotEmpty) ...[
             const SizedBox(height: 4),
@@ -257,9 +256,38 @@ class _JobCard extends ConsumerWidget {
               if (job.status == AudiobookJobStatus.completed &&
                   job.resultPath != null)
                 IconButton(
+                  icon: const Icon(Icons.play_arrow, size: 16),
+                  onPressed: () async {
+                    final resultPath = job.resultPath;
+                    if (resultPath == null || !File(resultPath).existsSync()) {
+                      return;
+                    }
+                    final book = Audiobook(
+                      id: 'job_${job.id}',
+                      title: job.title,
+                      path: resultPath,
+                      durationSeconds: 0,
+                      chunks: job.totalChunks,
+                      voice: job.voice,
+                      speed: job.speed,
+                      createdAt: job.finishedAt ?? job.createdAt,
+                    );
+                    await playback.play(book);
+                  },
+                  tooltip: 'Play output',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                ),
+              if (job.status == AudiobookJobStatus.completed &&
+                  job.resultPath != null)
+                IconButton(
                   icon: const Icon(Icons.folder_open, size: 16),
                   onPressed: () => Process.run('open', ['-R', job.resultPath!]),
-                  tooltip: 'Show in Finder',
+                  tooltip: 'Open Folder',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(

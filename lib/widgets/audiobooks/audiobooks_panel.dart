@@ -202,15 +202,13 @@ class _AudiobookCard extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
+            child: SelectableText(
               book.path,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontSize: 10,
                 color: theme.colorScheme.onSurfaceVariant,
                 fontFamily: 'monospace',
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
 
@@ -301,7 +299,7 @@ class _AudiobookCard extends ConsumerWidget {
                 IconButton(
                   icon: const Icon(Icons.folder_open, size: 16),
                   onPressed: () => Process.run('open', ['-R', book.path]),
-                  tooltip: 'Show in Finder',
+                  tooltip: 'Open Folder',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(

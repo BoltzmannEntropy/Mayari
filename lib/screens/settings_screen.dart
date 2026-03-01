@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../providers/tts_provider.dart';
 import '../providers/model_download_provider.dart';
+import '../providers/audiobook_provider.dart';
 import '../services/storage_service.dart';
 import '../services/log_service.dart';
 import '../version.dart';
@@ -44,7 +48,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 const SizedBox(height: 16),
                 _buildNavItem(Icons.tune, 'General', 0),
-                _buildNavItem(Icons.record_voice_over, 'Text-to-Speech', 1),
+                _buildNavItem(Icons.hub_rounded, 'Models', 1),
               ],
             ),
           ),
@@ -138,6 +142,12 @@ class _GeneralSettingsPane extends ConsumerWidget {
                   },
                 ),
               ),
+              const SizedBox(height: 24),
+
+              // Paths & Output Folders
+              _buildSectionHeader(context, 'System Folders'),
+              const SizedBox(height: 12),
+              const _PathsSettingsCard(),
               const SizedBox(height: 24),
 
               // About & Legal Section
@@ -283,6 +293,190 @@ class _GeneralSettingsPane extends ConsumerWidget {
   }
 }
 
+class _PathsSettingsCard extends ConsumerStatefulWidget {
+  const _PathsSettingsCard();
+
+  @override
+  ConsumerState<_PathsSettingsCard> createState() => _PathsSettingsCardState();
+}
+
+class _PathsSettingsCardState extends ConsumerState<_PathsSettingsCard> {
+  bool _loading = true;
+  String _appDocumentsDir = '';
+  String _logsDir = '';
+  String _modelDir = '';
+  String _audiobooksDir = '';
+  String _exportsDir = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPaths();
+  }
+
+  Future<void> _loadPaths() async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final modelDir = await ref.read(ttsServiceProvider).getModelDirectoryPath();
+    final audiobooksDir = await getAudiobooksDirectory();
+    final exportsDir = await getAudiobookExportsDirectory();
+    if (!mounted) return;
+    setState(() {
+      _appDocumentsDir = docsDir.path;
+      _logsDir = docsDir.path;
+      _modelDir = modelDir;
+      _audiobooksDir = audiobooksDir.path;
+      _exportsDir = exportsDir.path;
+      _loading = false;
+    });
+  }
+
+  Future<void> _pickOutputDirectory(String key, String currentPath) async {
+    final selected = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose output folder',
+      initialDirectory: Directory(currentPath).existsSync()
+          ? currentPath
+          : null,
+    );
+    if (selected == null || selected.trim().isEmpty) return;
+    await setConfiguredOutputDirectory(key, selected);
+    await _loadPaths();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Updated output folder: $selected')));
+  }
+
+  Future<void> _resetOutputDirectory(String key) async {
+    await setConfiguredOutputDirectory(key, '');
+    await _loadPaths();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Reset to default output folder')),
+    );
+  }
+
+  Widget _buildPathRow({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String path,
+    String? subtitle,
+    VoidCallback? onChoose,
+    VoidCallback? onReset,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              if (onChoose != null)
+                TextButton(onPressed: onChoose, child: const Text('Choose')),
+              if (onReset != null)
+                TextButton(onPressed: onReset, child: const Text('Reset')),
+            ],
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          SelectableText(
+            path,
+            style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (_loading) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Column(
+        children: [
+          _buildPathRow(
+            context: context,
+            icon: Icons.folder_open_rounded,
+            title: 'Audiobooks Output Folder',
+            subtitle: 'Used by generation jobs and history results',
+            path: _audiobooksDir,
+            onChoose: () =>
+                _pickOutputDirectory(audiobooksOutputDirKey, _audiobooksDir),
+            onReset: () => _resetOutputDirectory(audiobooksOutputDirKey),
+          ),
+          Divider(height: 1, color: theme.dividerColor),
+          _buildPathRow(
+            context: context,
+            icon: Icons.folder_copy_rounded,
+            title: 'Optimized Exports Folder',
+            subtitle: 'Used by optimized export jobs',
+            path: _exportsDir,
+            onChoose: () =>
+                _pickOutputDirectory(exportsOutputDirKey, _exportsDir),
+            onReset: () => _resetOutputDirectory(exportsOutputDirKey),
+          ),
+          Divider(height: 1, color: theme.dividerColor),
+          _buildPathRow(
+            context: context,
+            icon: Icons.description_outlined,
+            title: 'Application Documents',
+            path: _appDocumentsDir,
+          ),
+          Divider(height: 1, color: theme.dividerColor),
+          _buildPathRow(
+            context: context,
+            icon: Icons.manage_search_rounded,
+            title: 'System Logs Folder',
+            path: _logsDir,
+          ),
+          Divider(height: 1, color: theme.dividerColor),
+          _buildPathRow(
+            context: context,
+            icon: Icons.hub_rounded,
+            title: 'Models Folder',
+            path: _modelDir,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TtsSettingsPane extends ConsumerStatefulWidget {
   const _TtsSettingsPane();
 
@@ -298,6 +492,8 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
   bool _isLoading = true;
   bool _isSaving = false;
   String? _modelDirectoryPath;
+  int _modelDiskUsageBytes = 0;
+  int _modelFileCount = 0;
 
   @override
   void initState() {
@@ -349,8 +545,32 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
 
   Future<void> _loadModelPaths() async {
     final modelDir = await ref.read(ttsServiceProvider).getModelDirectoryPath();
+    final dir = Directory(modelDir);
+    var bytes = 0;
+    var files = 0;
+    if (dir.existsSync()) {
+      for (final entity in dir.listSync(recursive: true, followLinks: false)) {
+        if (entity is File) {
+          files += 1;
+          bytes += entity.lengthSync();
+        }
+      }
+    }
     if (!mounted) return;
-    setState(() => _modelDirectoryPath = modelDir);
+    setState(() {
+      _modelDirectoryPath = modelDir;
+      _modelDiskUsageBytes = bytes;
+      _modelFileCount = files;
+    });
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
   @override
@@ -599,8 +819,15 @@ class _TtsSettingsPaneState extends ConsumerState<_TtsSettingsPane> {
           if (modelDir != null) ...[
             const SizedBox(height: 12),
             Text(
-              'Model location',
+              'Model paths and disk usage',
               style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Download status: ${status.state.name} · Files: $_modelFileCount · Size: ${_formatBytes(_modelDiskUsageBytes)}',
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

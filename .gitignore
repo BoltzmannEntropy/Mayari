@@ -2,6 +2,7 @@
 .dart_tool/
 .packages
 build/
+.metadata
 *.iml
 .idea/
 .vscode/
@@ -29,6 +30,8 @@ linux/flutter/ephemeral/
 # Mayari local files
 .logs/
 .pids/
+runs/
+coverage/
 
 # Backend (Python)
 backend/.venv/
@@ -42,3 +45,7 @@ macos/Runner/Resources/kokoro/
 # Release artifacts (uploaded to GitHub Releases, not stored in git)
 dist/*.dmg
 dist/*.dmg.sha256
+dist/*-RELEASE_NOTES.md
+dist/*-RELEASE_NOTES.md.sha256
+dist/*-source.zip
+dist/*-source.zip.sha256

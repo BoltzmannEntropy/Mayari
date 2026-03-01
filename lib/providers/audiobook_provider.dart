@@ -123,6 +123,10 @@ final audiobookPlaybackProvider =
       return AudiobookPlaybackNotifier();
     });
 
+const String outputPathsStorageKey = 'output_paths';
+const String audiobooksOutputDirKey = 'audiobooks_dir';
+const String exportsOutputDirKey = 'exports_dir';
+
 enum AudiobookJobStatus { queued, running, completed, failed, cancelled }
 
 enum AudiobookJobType { generation, optimizedExport }
@@ -301,22 +305,63 @@ class AudiobookJob {
 
 /// Get the audiobooks directory
 Future<Directory> getAudiobooksDirectory() async {
+  return _resolveOutputDirectory(
+    configKey: audiobooksOutputDirKey,
+    fallbackSegments: ['Documents', 'Mayari Audiobooks'],
+  );
+}
+
+/// Get the default optimized-export directory.
+Future<Directory> getAudiobookExportsDirectory() async {
+  return _resolveOutputDirectory(
+    configKey: exportsOutputDirKey,
+    fallbackSegments: ['Documents', 'Mayari Exports'],
+  );
+}
+
+Future<Map<String, String>> getConfiguredOutputDirectories() async {
+  final data = await _loadOutputPathConfig();
+  return {
+    audiobooksOutputDirKey: (data[audiobooksOutputDirKey] as String?) ?? '',
+    exportsOutputDirKey: (data[exportsOutputDirKey] as String?) ?? '',
+  };
+}
+
+Future<void> setConfiguredOutputDirectory(String key, String value) async {
+  final storage = StorageService();
+  final data = await _loadOutputPathConfig();
+  if (value.trim().isEmpty) {
+    data.remove(key);
+  } else {
+    data[key] = value.trim();
+  }
+  await storage.saveJson(outputPathsStorageKey, data);
+}
+
+Future<Directory> _resolveOutputDirectory({
+  required String configKey,
+  required List<String> fallbackSegments,
+}) async {
   final home = Platform.environment['HOME'] ?? '/tmp';
-  final dir = Directory(p.join(home, 'Documents', 'Mayari Audiobooks'));
+  final config = await _loadOutputPathConfig();
+  final configuredPath = (config[configKey] as String?)?.trim();
+  final dir = configuredPath != null && configuredPath.isNotEmpty
+      ? Directory(configuredPath)
+      : Directory(p.joinAll([home, ...fallbackSegments]));
   if (!dir.existsSync()) {
     await dir.create(recursive: true);
   }
   return dir;
 }
 
-/// Get the default optimized-export directory.
-Future<Directory> getAudiobookExportsDirectory() async {
-  final home = Platform.environment['HOME'] ?? '/tmp';
-  final dir = Directory(p.join(home, 'Documents', 'Mayari Exports'));
-  if (!dir.existsSync()) {
-    await dir.create(recursive: true);
+Future<Map<String, dynamic>> _loadOutputPathConfig() async {
+  final storage = StorageService();
+  final loaded = await storage.loadJson(outputPathsStorageKey);
+  if (loaded is Map<String, dynamic>) return Map<String, dynamic>.from(loaded);
+  if (loaded is Map) {
+    return loaded.map((key, value) => MapEntry(key.toString(), value));
   }
-  return dir;
+  return {};
 }
 
 /// Notifier for managing audiobook list
