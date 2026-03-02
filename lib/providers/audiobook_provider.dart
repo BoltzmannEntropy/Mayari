@@ -1069,23 +1069,26 @@ class AudiobookJobsNotifier extends StateNotifier<List<AudiobookJob>> {
 /// Notifier for audiobook playback
 class AudiobookPlaybackNotifier extends StateNotifier<AudiobookPlaybackState> {
   final AudioPlayer _player = AudioPlayer();
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<Duration?>? _positionSubscription;
+  StreamSubscription<Duration?>? _durationSubscription;
 
   AudiobookPlaybackNotifier() : super(const AudiobookPlaybackState()) {
-    _player.playerStateStream.listen((playerState) {
+    _playerStateSubscription = _player.playerStateStream.listen((playerState) {
       if (playerState.processingState == ProcessingState.completed) {
         // Reset full state when playback completes naturally
         state = const AudiobookPlaybackState();
       }
     });
 
-    _player.positionStream.listen((position) {
+    _positionSubscription = _player.positionStream.listen((position) {
       // Only update position if we have an active playback
       if (state.playingId != null) {
         state = state.copyWith(position: position);
       }
     });
 
-    _player.durationStream.listen((duration) {
+    _durationSubscription = _player.durationStream.listen((duration) {
       if (duration != null && state.playingId != null) {
         state = state.copyWith(duration: duration);
       }
@@ -1145,6 +1148,9 @@ class AudiobookPlaybackNotifier extends StateNotifier<AudiobookPlaybackState> {
 
   @override
   void dispose() {
+    _playerStateSubscription?.cancel();
+    _positionSubscription?.cancel();
+    _durationSubscription?.cancel();
     _player.dispose();
     super.dispose();
   }
